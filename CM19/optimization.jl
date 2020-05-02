@@ -38,3 +38,27 @@ function active_set_method_quadratic(Q, q, A, b, x, ϵ)
         end
     end
 end
+
+abstract type DescentMethod end
+struct GradientDescent <: DescentMethod
+    α
+end
+init!(M::GradientDescent, f, ∇f, x) = M
+function step!(M::GradientDescent, f, ∇f, x)
+    α, g = M.α, ∇f(x)
+    return x - α*g
+end
+
+mutable struct ConjugateGradientDescent <: DescentMethod
+    d
+    g
+end
+function init!(M::ConjugateGradientDescent, f, ∇f, x)
+    M.g = ∇f(x)
+    M.d = -M.g
+    return M
+end
+function step!(M::ConjugateGradientDescent, f, ∇f, x)
+    d, g = M.d, M.g
+    g´ = ∇f(x)
+end

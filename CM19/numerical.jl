@@ -1,3 +1,5 @@
+using LinearAlgebra
+
 # Naive implementations of Numerical Analysis algos
 
 diff_forward(f, x; h=sqrt(eps(Float64))) = (f(x+h) - f(x))/h;
@@ -195,7 +197,11 @@ function cholevski_factorisation(A)
     V = copy(A)
     m, n = size(A)
     for i=1:m
-        V[i, i] = sqrt(V[i, i])
+        V[i, i] = sqrt(max(V[i, i], 0))
+        if V[i, i] == 0.
+            V[i:end, i:end] .= 0.
+            break
+        end
         V[i+1:m, i] /= V[i, i]
         for j=i+1:m
             for k=i+1:j
@@ -242,7 +248,7 @@ function rayleigh_iteration(A, v, n)
     return (v, λ)
 end
 
-using LinearAlgebra
+
 function rayleigh_inverse_iteration(A, v, n, λ)
     m, m = size(A)
     for i=1:n
@@ -401,3 +407,117 @@ function GMRES_naive(A, b, k, ϵ, ϵₐ)
 
     return (H, Q, Γ, UpperTriangular(T[1:end-1, :]), Λ, y)
 end
+
+# handmade bidiagonal
+# Requires big precision in floating-point operations
+# A = V*J'*U'
+using SparseArrays
+
+function bidiagonal_decomposition_handmade(A, x₀, ϵᵤ = 0.)
+    m, n = size(A)
+    l = min(m, n)
+    U = zeros(eltype(A), n, l+1)
+    V = zeros(eltype(A), m, l)
+    J = zeros(eltype(A), l+1, l)
+
+    U[:, 1] = x₀ / norm(x₀)
+    𝔲 = zeros(1)
+    𝔳 = zeros(1)
+    for i=1:l
+        v = A*U[:, i]
+        if i > 1
+            v -= V[:, i-1]*(V[:, i-1]'*v)
+        end
+        𝔳 = [𝔳; norm(v)]
+        V[:, i] = v/norm(v)
+
+        u = A'*V[:,i]
+
+        J[i, i] = U[:, i]'*u
+        u -= U[:, i]*J[i, i]
+
+        𝔲 = [𝔲; norm(u)]
+        J[i+1, i] = norm(u)
+        U[:, i+1] = u/J[i+1, i]
+    end
+
+    return (U, V, J, 𝔲, 𝔳)
+end
+
+# Unfortunately, the two-term iteration is not stable at all ...
+# since vector are less and less orthogonal
+function bidiagonal_decomposition_handmade2(A, x₀, ϵᵤ = 0.)
+    m, n = size(A)
+    l = min(m, n)
+    U = zeros(eltype(A), n, l+1)
+    V = zeros(eltype(A), m, l)
+    J = spzeros(eltype(A), l+1, l)
+
+    U[:, 1] = x₀ / norm(x₀)
+    #𝔲 = zeros(1)
+    #𝔳 = zeros(1)
+    for i=1:l
+        v = A*U[:, i]
+        for j=1:i-1
+            v -= V[:, j]*(V[:, j]'*v)
+        end
+        #𝔳 = [𝔳; norm(v)]
+        V[:, i] = v/norm(v)
+
+        u = A'*V[:,i]
+        for j=1:i-1
+            u -= U[:, j]*(U[:, j]'*u)
+        end
+        J[i, i] = U[:, i]'*u
+        u -= U[:, i]*J[i, i]
+        #𝔲 = [𝔲; norm(u)]
+        J[i+1, i] = norm(u)
+        U[:, i+1] = u/J[i+1, i]
+    end
+
+    return (U, V, J) #, 𝔲, 𝔳)
+end
+
+function test_bi(m, n, d=1., ϵ=1e-6)
+    A = Float64.(rand(1:m*n, m, n))
+    x = [1.; zeros(n-1)]
+    
+    function test(f)
+        U, V, J = f(A, x)
+
+        𝔄 = zeros(size(A'*A))
+        𝔄[:, 1] = (A'*A)[:, 1]
+        𝔄[:, 1] /= norm(𝔄[:, 1])
+        for i=2:n
+            𝔄[:, i] = A'*A*𝔄[:, i-1]
+            for j=1:i-1
+                𝔄[:, i] -= 𝔄[:, j]*(𝔄[:, j]')*𝔄[:, i]
+            end
+            # println(norm(𝔄[:, i]))
+            𝔞 = norm(𝔄[:, i])
+            𝔄[:, i] /= 𝔞
+            if 𝔞 < ϵ
+                break
+            end
+        end
+        println("rank(A) = ", rank(𝔄))
+        # println("𝔲 : ", 𝔲)
+        # println("𝔳 : ", 𝔳)
+        
+        println("|A-V*J'*U'|/|A| = ", norm(A-V*J'*U')/norm(A))
+        #m, n = size(J)
+        #for i=1:n-2
+        #    J[i, i+1:end] .= 0
+        #end
+        #println("|A-V*J̃'*U'|/|A| = ", norm(A-V*J'*U')/norm(A))
+        println("|U'*U-I| = ", norm(U[:, 1:end-1]'*U[:, 1:end-1]-I(size(U[:, 1:end-1]'*U[:, 1:end-1], 1))))
+        println("|V'*V-I| = ", norm(V'*V-I(size(V'*V, 1))))
+
+        return U, V, J
+    end
+
+    # test(bidiagonal_decomposition_handmade)
+    U, V, J =  test(bidiagonal_decomposition_handmade2)
+    return (A, x, U, V, J)
+end
+
