@@ -264,3 +264,67 @@ function solve_quadratic_min_flow(; 𝔓, μ, ε=1e-15, ϵ=1e-15, ϵₘ=1e-15, r
 
     return solve()
 end
+
+# For the specific case when E is the incidence matrix of a graph, 
+# the problem is separable in the subproblems corresponding to the
+# connected components, calculated hereafter as bitmasks on the nodes
+# E : node-arc incidence matrix
+function get_graph_components(E)
+    # m : number of nodes
+    # n : number of arcs
+    m, n = size(E)
+    M = E .≠ 0
+    B = zeros(Bool, m)
+    P = zeros(Bool, m, 0)
+    for i in 1:m
+        if B[i] == true
+            continue
+        end
+        
+        P = cat(P, zeros(Bool, m), dims=2)
+
+        B[i] = true
+        P[i, end] = true
+
+        Vᵢ = begin
+            N = M[:, M[i, :]]
+            if size(N, 2) == 0
+                zeros(Bool, m)
+            else
+                V = (.~(B)) .& reduce((a, b) -> a .| b, [N[:, i] for i in 1:size(N, 2)])
+                B .|= V
+                V
+            end
+        end
+        
+        if any(Vᵢ) == false
+            continue
+        end
+
+        P[:, end] .|= Vᵢ
+        stack = findall(Vᵢ)
+
+        j = 1
+        while j ≤ size(stack, 1)
+            Vⱼ = begin
+                N = M[:, M[stack[j], :]]
+                if size(N, 2) == 0
+                    zeros(Bool, m)
+                else
+                    V = (.~(B)) .& reduce((a, b) -> a .| b, [N[:, k] for k in 1:size(N, 2)])
+                    B .|= V
+                    V
+                end
+            end    
+            j += 1
+            if any(Vⱼ) == false
+                continue
+            end
+            
+            P[:, end] .|= Vⱼ
+            append!(stack, findall(Vⱼ))
+        end
+    end
+
+    return P
+end
