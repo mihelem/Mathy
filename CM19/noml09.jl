@@ -40,10 +40,180 @@ function noNaN(V)
     return (x -> isnan(x) ? 0. : x).(V)
 end
 
+# WIP 
+# REALLY! I mean: check all calculation etc...since there is something radically wrong
+# Dualised constraints: 
+# Ex = b
+# l ≤ x ≤ u
+function solve_quadratic_min_flow_dd(; 𝔓, ν, ϵ, ϵ_C=ϵ, ϵ_Q=0.0)
+    # NB: const is still not supported for local variables (er why?)
+    (Q, q, l, u, E, b) = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b)
+    E = eltype(Q).(E)
+    (m, n) = size(E)
+
+    # partition subspaces corresponding to ker(Q)
+    ℭ = [Q[i, i] > ϵ_Q for i in 1:n]
+    function partition(v)
+        return (v[.~ℭ], v[ℭ])
+    end
+    function partition!(v)
+        @views return (v[.~ℭ], v[ℭ])
+    end
+    n₁ = count(ℭ)
+    Q₁ = Q[ℭ, ℭ]
+    Q̃₁ = spdiagm(0 => [1.0/Q₁[i, i] for i in 1:n₁])
+    (E₀, E₁) = E[:, .~ℭ], E[:, ℭ]
+    ((q₀, q₁), (l₀, l₁), (u₀, u₁)) = partition.([q, l, u])
+    @views (μ, λᵤ, λₗ) = (ν[1:m], ν[m+1:m+n], ν[m+n+1:m+2n])
+    ((λᵤ₀, λᵤ₁), (λₗ₀, λₗ₁)) = partition!.([λᵤ, λₗ])
+
+    # from the singular part of Q we get a linear problem
+    # which translates to the equation
+    #     λₗ₀ = q₀ + λᵤ₀ + E₀ᵀμ
+    # from which we can remove λₗ₀ from the problem, 
+    # keeping the inequality constraints
+    #     λᵤ₀ + E₀ᵀμ + q₀ .≥ 0
+    #     λᵤ, λₗ₁ .≥ 0
+    λₗ₀[:] = q₀ + λᵤ₀ + E₀'*μ
+    # hence we have νᵣ which is ν restricted to the free variables
+    νᵣ = view(ν, [[i for i in 1:m+n]; (m+n) .+ findall(ℭ)])
+    ν₁ = view(ν, [[i for i in 1:m]; m .+ findall(ℭ); (m+n) .+ findall(ℭ)])
+
+    # I am minimizing -L(⁠ν), which is
+    # ½(E₁ᵀμ + λᵤ₁ - λₗ₁)ᵀQ̃₁(E₁ᵀμ + λᵤ₁ - λₗ₁) ( = ½ν₁ᵀT₁ᵀQ̃₁T₁ν₁ = L₂ ) + 
+    # q₁ᵀQ̃₁(E₁ᵀμ + λᵤ₁ - λₗ₁) + bᵀμ + u₁ᵀλᵤ₁ + (u₀-l₀)ᵀλᵤ₀ - l₀ᵀE₀ᵀμ - l₁ᵀλₗ₁ ( = tᵀνᵣ = L₁ ) +
+    # ½q₁ᵀQ̃₁q₁ - q₀ᵀl₀ ( = L₀ )
+    L₀ = 0.5q₁'*Q̃₁*q₁ - q₀'*l₀
+    ∇L₁ = begin
+        t_μ = E₁*Q̃₁*q₁ + b - E₀*l₀
+        t_λᵤ = zeros(eltype(t_μ), n)
+        t_λᵤ[ℭ] = Q̃₁*q₁ + u₁
+        t_λᵤ[.~(ℭ)] = u₀ - l₀
+        t_λₗ₁ = -Q̃₁*q₁ - l₁
+        [t_μ; t_λᵤ; t_λₗ₁]
+    end
+    get_L₁ = () -> ∇L₁'*νᵣ
+    T₁ = begin
+        T = [E₁' spzeros(eltype(Q), n₁, n) (-I)]
+        T[:, n .+ findall(ℭ)] = I(n₁)
+        T
+    end
+    ∇∇L₂ = T₁'*Q̃₁*T₁
+    get_∇L = () -> ∇L₁ + ∇∇L₂*νᵣ
+    get_L₂ = () -> ( T₁*νᵣ |> (a -> 0.5*a'*Q̃₁*a) )
+    get_L = () -> L₀ + get_L₁() + get_L₂()
+    get_λₗ₀ = () -> q₀ + E₀'*μ + λᵤ₀
+    function get_x()
+        x = spzeros(n)
+        x[ℭ] = -q₁ - E₁'*μ - λᵤ₁ + λₗ₁
+        λₗ₀ = get_λₗ₀()
+        active_λₗ₀ = λₗ₀ .> 0
+        x[.~ℭ][active_λₗ₀] .= l[.~ℭ][active_λₗ₀]
+        active_λᵤ₀ = λᵤ₀ .> 0
+        x[.~ℭ][active_λᵤ₀] .= u[.~ℭ][active_λᵤ₀]
+        inactive_i = findall(.~ℭ) |> (P -> [P[i] for i in findall(.~(active_λᵤ₀ .| active_λᵤ₀))])
+        active = spzeros(Bool, n) |> (a -> (for i in inactive_i a[i] = true end; a))
+        inactive = .~active
+
+        # left inverse not supported for sparse vectors
+        x[inactive] =  E[:, inactive] \ Array(b - E[:, active]*x[active])
+        # TODO: check the above is satisfying the constraints
+        return x
+    end
+    
+    function get_α(d)
+        function get_constraints()
+            # constraints: E₀ᵀμ + λᵤ₀ + q₀ .≥ 0   &&   λᵣ .≥ 0   =>
+            #   α*(E₀ᵀ*d_μ+d_λᵤ₀) .≥ -(E₀ᵀμ + λᵤ₀ + q₀)
+            #              α*d_λᵣ .≥ -λᵣ
+            M = [E₀'*d[1:m] + d[m+1:m+n][.~ℭ]   (-(E₀'μ + λᵤ₀ + q₀))]
+            M = cat(M, [d[m+1:end]   (-νᵣ[m+1:end])], dims=1)
+
+            # (𝔲, 𝔩)  : constraints defining an (upper, lower) bound for α
+            𝔲, 𝔩 = (M[:, 1] .< 0), (M[:, 1] .> 0)
+            C = spzeros(eltype(M), size(M, 1))
+            (𝔲 .| 𝔩) |> 𝔠 -> C[𝔠] = M[𝔠, 1] ./ M[𝔠, 2]
+
+            return (𝔩, 𝔲, C)
+        end
+        function apply_constraints(α, (𝔩, 𝔲, C))
+            α_lb, α_ub = maximum([C[𝔩]; -Inf]), minimum([C[𝔲]; Inf])
+            if isnan(α)
+                # todo: why?
+            end
+            if α + ϵ*abs(α) < α_lb
+                println("ERROR: α = $α is less than $α_lb")
+            end
+            println("$α_lb ≤ α = $α ≤ $α_ub")
+            α = min(max(α, α_lb), α_ub)
+            
+            active_C = zeros(Bool, size(C, 1))
+            α₊, α₋ = α*(1+ϵ_C*sign(α)), α*(1-ϵ_C*sign(α))
+            C₊, C₋ = C .* (1 .+ ϵ_C*sign.(C)), C .* (1. .- ϵ_C*sign.(C))
+            active_C[𝔲] = (α₋ .≥ C₊[𝔲])
+            # for the lower bounds, would be (α₊ .≤ C₋)
+
+            return (α, active_C)
+        end
+        
+        # ∂L = d'*∇∇L₂*(νᵣ + α*d) + d'*∇L₁ => α = -(d'*∇L₁ + d'*∇∇L₂*νᵣ) / (d'*∇∇L₂*d)
+        # avoid multiple piping for better readability
+        α = d'*∇∇L₂ |> (a -> - (d'*∇L₁ + a*νᵣ) / (a*d))
+        𝔩, 𝔲, C = get_constraints()
+        return apply_constraints(α, (𝔩, 𝔲, C))
+    end
+
+    function solve_by_proj_conj_grad()
+        ∇L = get_∇L()
+        println("|∇L| = $(norm(∇L))\tL = $(-get_L())")
+        d = -∇L
+        #       | E₀      | 0   |
+        #  ∇C = | [.~ℭ]I  |  I  |
+        #       | 0       |     |
+        ∇C = -[[E₀; (I(n))[:, .~ℭ]; spzeros(eltype(Q), n₁, n-n₁)]  [spzeros(eltype(Q), m, n+n₁); I(n+n₁)]]
+        
+        counter = 0
+        while norm(∇L) > ϵ
+            println("")
+            α, active_C = get_α(d)
+            println.(["α = $α", "active_C = $active_C"])
+            νᵣ[:] += α*d
+            ∇L = get_∇L()
+            println("|∇L| = $(norm(∇L))\tL = $(-get_L())")
+            d[:] = ∇∇L₂*d |> (Md -> -∇L + d * (∇L'*Md) / (d'*Md))
+            println("dᵀ∇L = $(d'*∇L)")
+
+            # project d onto the feasible space for νᵣ
+            if any(active_C)
+                for c in eachcol(∇C[:, active_C])
+                    dᵀc = d'*c
+                    if dᵀc > 0.
+                        d -= c * dᵀc / (c'*c)
+                    end
+                end
+                println("After projection: dᵀ∇L = $(d'*∇L)")
+            end
+            counter += 1
+            if counter > 20
+                break
+            end
+        end
+
+        x, ∇L = get_x(), get_∇L()
+        println("μ = $μ\nx = $x\n∇L = $∇L")
+
+        λₗ₀[:] = get_λₗ₀()
+        return (ν, x)
+    end
+
+    return solve_by_proj_conj_grad()
+end
+
 # Assumptions:
 # constrained space ≠ ∅
 # If this is not guaranteed, add a check - it should return nothing by now :)
-
+# Usage (example):  
+# x̄, μ, L, ∇L̄ = solve_quadratic_min_flow(𝔓=𝔓, μ=zeros(Float64, 2), ε=1e-12, ϵ=1e-12, reset₀=Inf)
 function solve_quadratic_min_flow(; 𝔓, μ, ε=1e-15, ϵ=1e-15, ϵₘ=1e-15, reset₀=Inf)
     Q, q, l, u, E, b = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b)
     Q_diag = [Q[i, i] for i in 1:size(Q, 1)]
