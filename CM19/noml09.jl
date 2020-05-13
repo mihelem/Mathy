@@ -211,7 +211,17 @@ end
 # Problem
 # minₓ { ½xᵀQx + qᵀx  with  x s.t.  Ex = b  &  l ≤ x ≤ u }
 # Q ∈ { diag ≥ 0 }
-struct quadratic_min_cost_flow_boxed_problem
+abstract type min_cost_flow_problem end
+abstract type quadratic_min_cost_flow_boxed_problem <: min_cost_flow_problem end
+struct unreduced_qmcfbp <: quadratic_min_cost_flow_boxed_problem
+    Q
+    q
+    l
+    u
+    E
+    b
+end
+struct reduced_qmcfbp <: quadratic_min_cost_flow_boxed_problem
     Q
     q
     l
@@ -236,7 +246,7 @@ function generate_quadratic_min_cost_flow_boxed_problem(type, m, n; sing=0)
     l = -10*rand(eltype(Q), n)+x
     u = 10*rand(eltype(Q), n)+x
     b = E*x
-    return quadratic_min_cost_flow_boxed_problem(Q, q, l, u, E, b)
+    return unreduced_qmcfbp(Q, q, l, u, E, b)
 end
 
 function noNaN(V)
@@ -254,7 +264,7 @@ end
 # Another Dual
 # Equality constrained absorbed by the nullspace method
 # dualising box constriants
-function solve_quadratic_min_flow_d(; 𝔓, λ, ϵ)
+function solve_quadratic_min_flow_d3(; 𝔓, λ, ϵ)
     (Q, q, l, u, E, b) = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b)
     
     # Assumption : m ≤ n
@@ -332,7 +342,7 @@ end
 # Dualised constraints: 
 # Ex = b
 # l ≤ x ≤ u
-function solve_quadratic_min_flow_d2(; 𝔓, ν, ϵ, ϵ_C=ϵ*100, ϵ_Q=0.0)
+function solve_quadratic_min_flow_d2a(; 𝔓, ν, ϵ, ϵ_C=ϵ*100, ϵ_Q=0.0)
     # NB: const is still not supported for local variables (er why?)
     (Q, q, l, u, E, b) = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b)
     E = eltype(Q).(E)
@@ -443,8 +453,7 @@ function solve_quadratic_min_flow_d2(; 𝔓, ν, ϵ, ϵ_C=ϵ*100, ϵ_Q=0.0)
             α₊, α₋ = α*(1+ϵ_C*sign(α)), α*(1-ϵ_C*sign(α))
             C₊, C₋ = C .* (1 .+ ϵ_C*sign.(C)), C .* (1. .- ϵ_C*sign.(C))
             active_C[𝔲] = ((α₋ .≤ C₊[𝔲]) .& (α₊ .≥ C₋[𝔲]))
-            println("$(active_C)")
-            #println("$α_lb ≤ α = $α ≤ $α_ub")
+
             return (α, active_C)
         end
         
@@ -499,10 +508,9 @@ function solve_quadratic_min_flow_d2(; 𝔓, ν, ϵ, ϵ_C=ϵ*100, ϵ_Q=0.0)
             # d[:] = (counter & 0) != 0 ? (∇∇L₂*d |> (Md -> P∇L - d * (P∇L'*Md) / (d'*Md))) : P∇L
             d[:] = ∇L + d*(∇L'*∇L - ∇L'*∇L₀) / (∇L₀'*∇L₀)
             
-            #if d'∇L < 0.
-            #    d[:] = P∇L
-            #    project!(view(∇C, :, active_C), d)
-            #end
+            if d'∇L < 0.
+                d[:] = P∇L
+            end
             # d[:] = P∇L
             #d[:] = d + norm(d)*rand(eltype(d), size(d, 1))*0.2
             project!(view(∇C, :, active_C), P∇L) 
@@ -535,32 +543,51 @@ end
 # If this is not guaranteed, add a check - it should return nothing by now :)
 # Usage (example):  
 # x̄, μ, L, ∇L̄ = solve_quadratic_min_flow(𝔓=𝔓, μ=zeros(Float64, 2), ε=1e-12, ϵ=1e-12, reset₀=Inf)
-function solve_quadratic_min_flow_d1(; 𝔓, μ, ε=1e-15, ϵ=1e-15, ϵₘ=1e-15, reset₀=Inf)
-    Q, q, l, u, E, b = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b)
-    Q_diag = [Q[i, i] for i in 1:size(Q, 1)]
-    m, n = size(E)      # m: number 
-    Q̃ = zeros(eltype(Q), size(Q))
-    for i=1:size(Q, 1)
-        Q̃[i, i] = 1. / Q[i, i]
+function solve_quadratic_min_flow_d1(; 𝔓, μ, ε=1e-12, ϵ=1e-12, ϵₘ=1e-12, reset₀=Inf, max_iter=5000, reduce=false, verb=0)
+    # verbosity utility
+    function verba(level, message)
+        if level ≤ verb
+            println(message)
+        end
     end
+
+    Q, q, l, u, E, b = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b)
+
+    Q_diag = view(Q, [CartesianIndex(i, i) for i in 1:size(Q, 1)])
+    𝔎 = Q_diag .< ϵₘ
+    λ_min = minimum(Q_diag[.~𝔎])
+
+    # reduce == true ⟹ assume E represent a connected graph
+    if reduce == true
+        E, b, μ = E[1:end-1, :], b[1:end-1], μ[1:end-1]
+    end
+    m, n = size(E)      # m: number 
+
+    Q̃ = spzeros(eltype(Q), size(Q, 1), size(Q, 2))
+    Q̃_diag = view(Q̃, [CartesianIndex(i, i) for i in 1:size(Q, 1)])
+    Q̃_diag[:] = 1. ./ Q_diag
+
     Ql, Qu = Q*l, Q*u
-    # println.(["l = $l", "u = $u"])
-    Ql_ϵ, Qu_ϵ = Ql+ϵ*abs.(Ql), Qu-ϵ*abs.(Qu)
+
+    # 0 attractor
+    to0 = x::AbstractFloat -> (abs(x) ≥ ϵₘ ? x : 0.)
+    a::AbstractFloat ≈ b::AbstractFloat = (1+ϵₘ*sign(a))*a ≥ (1-ϵₘ*sign(b))*b && (1+ϵₘ*sign(b))*b ≥ (1-ϵₘ*sign(a))*a
 
     function get_L(x, μ)
         return 0.5*x'*Q*x + q'*x + μ'*(E*x-b)
     end
     # x̃ = argminₓ L(x, μ) without box constraints
     function get_Qx̃(μ)
-        return -E'*μ-q #(a -> abs(a)>ϵₘ ? a : 0).(-E'*μ-q)
+        verba(3, "get_Qx̃: Qx̃=$(to0.(-E'*μ-q))")
+        return to0.(-E'*μ-q) #(a -> abs(a)>ϵₘ ? a : 0).(-E'*μ-q)
     end
     # ✓
     function get_Qx̃(μ̄, 𝔅)
-        return -E[:, 𝔅[:, 2]]'*μ̄ -q[𝔅[:, 2]] #(a -> abs(a)>ϵₘ ? a : 0).(-E[:, 𝔅[:, 2]]'*μ̄ -q[𝔅[:, 2]])
+        return to0.(-E[:, 𝔅[:, 2]]'*μ̄ -q[𝔅[:, 2]]) #   -E[:, 𝔅[:, 2]]'*μ̄ -q[𝔅[:, 2]] #
     end
-    # x̅ = argminₓ L(x, μ) witholding box constraints l .<= x .<= u
+    # x̅ = argminₓ L(x, μ) beholding box constraints l .<= x .<= u
     function get_x̅(μ)
-        return [ maximum(noNaN.([min(u[i], (-μ'*E[:, i]-q[i]) / Q[i, i]), l[i]])) for i=1:n ]
+        return [ maximum([min(u[i], (-μ'*E[:, i]-q[i]) / Q[i, i]), l[i]]) for i=1:n ]
     end
     # mark if x is on a side of the box constraints
     # 1 -> lower  2 -> interior  3 -> upper
@@ -572,7 +599,7 @@ function solve_quadratic_min_flow_d1(; 𝔓, μ, ε=1e-15, ϵ=1e-15, ϵₘ=1e-15
         return 𝔅
     end
     function get_x̅(Qx̃, 𝔅)
-        return sum(noNaN.([𝔅[:, 1].*l, 𝔅[:, 2].*(Q̃*Qx̃), 𝔅[:, 3].*u]))
+        return sum([𝔅[:, 1].*l, 𝔅[:, 2].*(Q̃*Qx̃), 𝔅[:, 3].*u])
     end
     # ∇L with respecto to μ, that is the constraint E*x(μ)-b
     function get_∇L(x)
@@ -586,11 +613,11 @@ function solve_quadratic_min_flow_d1(; 𝔓, μ, ε=1e-15, ϵ=1e-15, ϵₘ=1e-15
 
         𝔩 = [Eᵀd .< 0  Eᵀd .> 0]        
         ᾱs[𝔩] = ([Qx̃ Qx̃][𝔩] - [Ql Ql][𝔩]) ./ [Eᵀd Eᵀd][𝔩]
-        𝔩[𝔩] = 𝔩[𝔩] .& (ᾱs[𝔩] .≥ 0)
+        𝔩[𝔩] = 𝔩[𝔩] .& (ᾱs[𝔩] .≥ -100*ϵₘ)
 
         𝔲 = [Eᵀd .> 0  Eᵀd .< 0]
         ᾱs[𝔲] = ([Qx̃ Qx̃][𝔲] - [Qu Qu][𝔲]) ./ [Eᵀd Eᵀd][𝔲]
-        𝔲[𝔲] = 𝔲[𝔲] .& (ᾱs[𝔲] .≥ 0)
+        𝔲[𝔲] = 𝔲[𝔲] .& (ᾱs[𝔲] .≥ -100*ϵₘ)
 
         return (ᾱs, 𝔩, 𝔲)
     end
@@ -602,31 +629,53 @@ function solve_quadratic_min_flow_d1(; 𝔓, μ, ε=1e-15, ϵ=1e-15, ϵₘ=1e-15
 
         𝔩 = [Eᵀd .< 0  Eᵀd .> 0]        
         ᾱs[𝔩] = ([Qx̃ Qx̃][𝔩] - [Ql Ql][𝔩]) ./ [Eᵀd Eᵀd][𝔩]
-        𝔩[𝔩] = 𝔩[𝔩] .& (ᾱs[𝔩] .≥ 0)
+        𝔩[𝔩] = 𝔩[𝔩] .& (ᾱs[𝔩] .≥ -ϵₘ)
 
         𝔲 = [Eᵀd .> 0  Eᵀd .< 0]
         ᾱs[𝔲] = ([Qx̃ Qx̃][𝔲] - [Qu Qu][𝔲]) ./ [Eᵀd Eᵀd][𝔲]
-        𝔲[𝔲] = 𝔲[𝔲] .& (ᾱs[𝔲] .≥ 0)
+        𝔲[𝔲] = 𝔲[𝔲] .& (ᾱs[𝔲] .≥ -ϵₘ)
 
         return (ᾱs, 𝔩, 𝔲)
     end
     # ✓
     function sortperm_ᾱs(ᾱs, 𝔩, 𝔲)
         P = findall(𝔩 .| 𝔲)
-        return sort!(P, lt = (i, j) -> (ᾱs[i], i[2], i[1]) < (ᾱs[j], j[2], j[1]))
-        #return (x -> P[x]).(sortperm(ᾱs[𝔩[:] .| 𝔲[:]]))
+        return sort!(P, lt = (i, j) -> begin
+            if ᾱs[i] ≈ ᾱs[j]
+                (i[2], ᾱs[i], i[1]) < (j[2], ᾱs[j], j[1])
+            else
+                ᾱs[i] < ᾱs[j]            
+            end
+        end)
     end
     # ✓
-    function line_search!(x, μ, d, 𝔅)
+    function exact_line_search!(x, μ, d, 𝔅)
         Eᵀμ, Eᵀd, dᵀb, Qx̃ = E'*μ, E'*d, d'*b, get_Qx̃(μ)
         ᾱs, 𝔩, 𝔲 = get_ᾱs(Qx̃, Eᵀd)
-        P_ᾱs = sortperm_ᾱs(ᾱs, 𝔩, 𝔲)
-        # println.(["ᾱs = $(ᾱs)", "P_ᾱs = $(P_ᾱs)", "sorted_ᾱs = $(ᾱs[P_ᾱs])", ""])
+        function filter_inconsistent(P)
+            in = 𝔅[:, 2]
+            verba(4, "filter_inconsistent: siamo nelle regioni $(findall(in))")
+            verba(4, "filter_inconsistent: unfiltered=$([(p[1], p[2]) for p in P])")
+            remove = zeros(Bool, size(P, 1))
+            for i in 1:size(P, 1)
+                p = P[i]
+                if in[p[1]] == (p[2] == 1)
+                    remove[i] = true
+                    continue
+                end
+                in[p[1]] = (p[2] == 1)
+            end
+            verba(4, "filter_inconsistent: filtered=$([(p[1], p[2]) for p in P[.~remove]])")
+            return P[.~remove]
+        end
+        P_ᾱs = filter_inconsistent(sortperm_ᾱs(ᾱs, 𝔩, 𝔲))
+        verba(3, "exact_line_search: αs=$(ᾱs[P_ᾱs])")
 
         # x(μ) is NaN when it is not a function, so pick the best representative
         function resolve_nan!(x)
             𝔫 = isnan.(x)
             if any(𝔫)
+                verba(2, "resolve_nan: resolving NaN in x=$x")
                 Inc = Eᵀd[𝔫] .> 0
                 Dec = Eᵀd[𝔫] .< 0
                 Nul = Eᵀd[𝔫] .== 0
@@ -634,10 +683,12 @@ function solve_quadratic_min_flow_d1(; 𝔓, μ, ε=1e-15, ϵ=1e-15, ϵₘ=1e-15
                 S = dᵀb - Eᵀd[.~𝔫]'*x[.~𝔫]
                 λ = (S - Eᵀd[𝔫]'*L̂) / (Eᵀd[𝔫]'*(Û-L̂))
                 if 0 ≤ λ ≤ 1
-                    x[𝔫] = L̂ + λ*(Û-L̂)
+                    x[𝔫] = L̂ + λ*(Û - L̂) + Nul.*(l[𝔫]+u[𝔫]) / 2
+                    verba(2, "resolve_nan: resolved x=$x")
                     return true
                 else
-                    x[𝔫] = L̂ + (λ > 1)*(Û - L̂)
+                    x[𝔫] = Nul.*(l[𝔫]+u[𝔫]) / 2 + ((λ > 1) ? Û : L̂)
+                    verba(2, "resolve_nan: UNresolved x=$x")
                     return false
                 end
             end
@@ -645,115 +696,160 @@ function solve_quadratic_min_flow_d1(; 𝔓, μ, ε=1e-15, ϵ=1e-15, ϵₘ=1e-15
         end
 
         function find_α!(μ, x, α₀, α₁)
-            # ∂L = Eᵀd'*x-dᵀb
             if any(𝔅[:, 2])
-                Δα = (Eᵀd'*x-dᵀb) / (Eᵀd[𝔅[:, 2]]' * Q̃[𝔅[:, 2], 𝔅[:, 2]] * Eᵀd[𝔅[:, 2]])
-                #println("Δα = $(Δα)")# because \n Δα = $(Eᵀd'*x-dᵀb) / ($(Eᵀd[𝔅[:, 2]]') * $(Q̃[𝔅[:, 2], 𝔅[:, 2]]) * $(Eᵀd[𝔅[:, 2]]))")
+                verba(3, "find_α: siamo nelle regioni $(findall(𝔅[:, 2]))")
+                Δα = (Eᵀd'*x - dᵀb) / (Eᵀd[𝔅[:, 2]]' * Q̃[𝔅[:, 2], 𝔅[:, 2]] * Eᵀd[𝔅[:, 2]])
+                verba(3, "find_α: Δα = $(Δα)")
                 if isnan(Δα)
                     Δα = 0
                 end
                 if 0 ≤ Δα ≤ α₁-α₀
                     μ[:] = μ + (α₀+Δα)*d
                     x[:] = get_x̅(get_Qx̃(μ), 𝔅)
-                    # println.(["x = $x", "μ = $μ", "𝔅 = $𝔅"])
-                    # x[𝔅[:, 2]] = -Q̃[𝔅[:, 2], 𝔅[:, 2]] * (E[:, 𝔅[:, 2]]'*μ + q[𝔅[:, 2]])
+                    verba(3, "find_α: μ=$μ \nfind_α: Qx̃=$(get_Qx̃(μ)) \nfind_α: x=$x")
                     return true
                 end
+                verba(3, "find_α: Δα is outside of this region")
             end
             return false
         end
 
-        ᾱ, μ̄ = 0., copy(μ) 
-        for i in P_ᾱs
-            # println.(["x = $x", "μ̄ = $μ̄ ", "μ = $μ", "ᾱ = $ᾱ", "𝔅 = $(𝔅[:, 2])"])
-            resolved_nan = resolve_nan!(x)
-            if resolved_nan == true
-                # println("resolved NaN -> \n\tμ = $μ \n\tx = $x\n")
-                return
-            elseif resolved_nan == nothing
-                if find_α!(μ, x, ᾱ, ᾱs[i]) == true
-                    # println("found α -> \n\tμ = $μ \n\tx = $x\n")
+        ᾱ, μ̄  = 0., copy(μ)
+        j = 1
+        last_j = size(P_ᾱs, 1)
+        while j ≤ last_j
+            μ̄[:] = μ
+            i = P_ᾱs[j]
+            found_α = find_α!(μ̄, x, ᾱ, ᾱs[i])
+            if found_α
+                resolved_nan = resolve_nan!(x)
+                if resolved_nan === true || resolved_nan === nothing
+                    μ[:] = μ̄
                     return
                 end
             end
 
-            # println("")
             # set 𝔅 for next ᾱ
-            𝔅[i[1], :] = (i[2] == 2) ? [𝔩[i] false 𝔲[i]] : [false true false]
-            ᾱ = ᾱs[i]
-            μ̄  = μ + ᾱ*d
+            k = j
+            while (k ≤ last_j) && (P_ᾱs[k][2] == P_ᾱs[j][2]) && (ᾱs[P_ᾱs[k]] ≈ ᾱs[P_ᾱs[j]])
+                verba(4, "exact_line_search: cross border of region $(P_ᾱs[k])")
+                verba(4, "exact_line_search: dalle regioni $(findall(𝔅[:, 2]))")
+                P_ᾱs[k] |> ii -> begin
+                    𝔅[ii[1], :] = (ii[2] == 2) ? [𝔩[ii] false 𝔲[ii]] : [false true false]
+                    ᾱ = ᾱs[ii]
+                end
+                verba(4, "exact_line_search: alle regioni $(findall(𝔅[:, 2]))")
+                k += 1
+            end
+            verba(4, "exact_line_search: ALLA FINE DEL GRUPPO $(findall(𝔅[:, 2]))")
+
+            j = k
+            μ̄[:]  = μ + ᾱ*d
             Qx̃[𝔅[:, 2]] = get_Qx̃(μ̄, 𝔅)
             x[𝔅[:, 2]] = max.(min.(Q̃[𝔅[:, 2], 𝔅[:, 2]]*Qx̃[𝔅[:, 2]], u[𝔅[:, 2]]), l[𝔅[:, 2]])
-            # println("x[$(𝔅[:, 2])] = $(x[𝔅[:, 2]]) = max.(min.($(Q̃[𝔅[:, 2], 𝔅[:, 2]])*$(Qx̃[𝔅[:, 2]]), $(u[𝔅[:, 2]])), $(l[𝔅[:, 2]]))")
         end
-        # println.(["x = $x", "μ̄ = $μ̄ ", "μ = $μ", "ᾱ = $ᾱ", "𝔅 = $(𝔅[:, 2])", ""])
-        resolved_nan = resolve_nan!(x)
-        if resolved_nan == true
-            # println("resolved NaN -> \n\tμ = $μ \n\tx = $x\n")
-            return
-        elseif resolved_nan == nothing
-            if find_α!(μ, x, ᾱ, Inf) == true
-                # println("found α -> \n\tμ = $μ \n\tx = $x\n")
+        μ̄[:] = μ
+        found_α = find_α!(μ̄, x, ᾱ, Inf)
+        if found_α
+            resolved_nan = resolve_nan!(x)
+            if resolved_nan === true || resolved_nan === nothing
+                μ[:] = μ̄
                 return
             end
         end
     end
 
     function solve()
+        # Reach iteratively the singular Q
+        λ = λ_min
+        function update_λ(λ′)
+            λ = λ′
+            Q_diag[𝔎] .= λ
+            Q̃_diag[𝔎] .= 1. / λ
+            Qu[𝔎], Ql[𝔎] = Q_diag[𝔎] .* u[𝔎], Q_diag[𝔎] .* l[𝔎]
+        end
+        update_λ(λ/10.)
+
+        Ls = []
+        norm∇Ls = []
         Qx̃ = get_Qx̃(μ)
         𝔅 = zeros(Bool, size(E, 2), 3)
         on_box_side!(Qx̃, 𝔅)
         x̅ = get_x̅(Qx̃, 𝔅)
 
         while any(isnan.(x̅))
-            println("Perturbing the starting μ to avoid NaNs")
-            μ += ε*(rand(eltype(μ), size(μ, 1))-0.5)
-            Qx̃ = get_Qx̃(μ)
-            𝔅 = zeros(Bool, size(E, 2), 3)
+            verba(2, "solve: perturbing the starting μ to avoid NaNs")
+            μ[:] += ε*(rand(eltype(μ), size(μ, 1))-0.5)
+            Qx̃[:] = get_Qx̃(μ)
+            𝔅[:, :] = zeros(Bool, size(E, 2), 3)
             on_box_side!(Qx̃, 𝔅)
-            x̅ = get_x̅(Qx̃, 𝔅)
+            x̅[:] = get_x̅(Qx̃, 𝔅)
         end
 
         ∇L = get_∇L(x̅)
+        norm∇L = norm(∇L) 
+        norm∇Ls = [norm∇Ls; norm∇L]
+        Ls = [Ls; get_L(x̅, μ)]
+        verba(1, "solve: |∇L| = $(norm∇L) \nsolve: L = $(get_L(x̅, μ))\n")
         d = copy(∇L)
         ∇L₀ = copy(∇L)
-        #L₀, L = -Inf, get_L(x̅, μ)
         reset = reset₀
         counter = 0
-        while (norm(∇L) ≥ ε) # && (L-L₀ ≥ ε*abs(L))
-            # println("\n---------------------\n d = $d\n")
-            line_search!(x̅, μ, d, 𝔅)
-            # L₀, L = L, get_L(x̅, μ)
+        while (norm∇L ≥ ε) # && (L-L₀ ≥ ε*abs(L))
+            if norm∇L < λ
+                update_λ(λ / 1.2)
+            end
+            exact_line_search!(x̅, μ, d, 𝔅)
+            verba(2, "solve: μ=$μ\nsolve: x=$x̅")
             ∇L₀, ∇L = ∇L, get_∇L(x̅)
-            # d = reset == 0 ? (reset = reset₀; ∇L) : (reset = reset-1; ∇L - d*(∇L'*EQ̃Eᵀ*d)/(d'*EQ̃Eᵀ*d) )
-            #if norm(∇L) > 1
-            #    Qx̃ = get_Qx̃(μ)
-            #    on_box_side!(Qx̃, 𝔅)
-            #    x̅ = get_x̅(Qx̃, 𝔅)
-            #    ∇L = get_∇L(x̅)
-            #end
-            #if reset == 0
-            #    reset = reset₀;
-            #    d[:] = ∇L 
-            #else
-                reset = reset-1
-                d[:] = ∇L + d*(∇L'*∇L - ∇L'*∇L₀) / (∇L₀'*∇L₀)
-                if d'*∇L < 0
-                    d[:] = ∇L
-                end
-                #println("dᵀ*∇L = $(d'*∇L)")
-            #end
-            println.(["|∇L| = $(norm(∇L))"]) #, "L = $L", ""])
+            norm∇L = norm(∇L)
+            verba(4, "solve: dᵀ∇L = $(d'∇L)")
+            reset = reset-1
+            d[:] = ∇L + d*(∇L'*∇L - ∇L'*∇L₀) / (∇L₀'*∇L₀)
+            if d'*∇L < 0
+                d[:] = ∇L
+            end
+            verba(3, "solve: d=$d")
+            # d[:] = ∇L
+            #d[:] += 1000*ε*(-0.5 .+ rand(size(d, 1)))
+            verba(1, "solve: |∇L| = $(norm∇L) \nsolve: L = $(get_L(x̅, μ))\n")
+            norm∇Ls = [norm∇Ls; norm∇L]
+            Ls = [Ls; get_L(x̅, μ)]
             counter += 1
+            if counter == max_iter
+                break
+            end
         end
 
         L = get_L(x̅, μ)
-        println("L = $L")
-        println("\n$counter iterazioni\n")
-        return (x̅, μ, L, ∇L)
+        verba(0, "solve: L = $L")
+        verba(0, "\nsolve: $counter iterazioni\n")
+        return (x̅, μ, L, ∇L, Ls, norm∇Ls, λ)
     end
 
     return solve()
+end
+
+using Plots
+function test(;solver, singular, maxiter, m, n, 𝔓=nothing, reduce=false, verb=1, ε=1e-8)
+    if 𝔓 === nothing
+        𝔓 = generate_quadratic_min_cost_flow_boxed_problem(Float64, m, n, sing=singular)
+        if reduce == true
+            𝔓 = reduce_quadratic_problem(𝔓)[1]
+        end
+    end
+
+    Q, q, l, u, E, b = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b)
+    x̄, μ, L, ∇L, Ls, norms, λ = solver(𝔓=𝔓, μ=zeros(Float64, size(E, 1)),  max_iter=maxiter, ε=ε, ϵ=1e-25, reduce=reduce, verb=verb)
+    p = plot(1:size(Ls, 1), Ls)
+    plot!(p, 1:size(norms, 1), norms)
+    return p, 𝔓, λ
+end
+
+function reduce_quadratic_problem(𝔓::quadratic_min_cost_flow_boxed_problem)
+    Q, q, l, u, E, b = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b)
+    P_row, P_col = get_graph_components(E)
+    return [reduced_qmcfbp(Q[p_col, p_col], q[p_col], l[p_col], u[p_col], E[p_row, p_col], b[p_row]) for (p_row, p_col) in zip(eachcol(P_row), eachrow(P_col))]
 end
 
 # For the specific case when E is the incidence matrix of a graph, 
@@ -767,17 +863,20 @@ function get_graph_components(E)
     M = E .≠ 0
     B = zeros(Bool, m)
     P = zeros(Bool, m, 0)
+    P_C = zeros(Bool, 0, n)
     for i in 1:m
         if B[i] == true
             continue
         end
         
         P = cat(P, zeros(Bool, m), dims=2)
+        P_C = cat(P_C, zeros(Bool, 1, n), dims=1)
 
         B[i] = true
         P[i, end] = true
 
         Vᵢ = begin
+            P_C[end, :] = M[i, :]
             N = M[:, M[i, :]]
             if size(N, 2) == 0
                 zeros(Bool, m)
@@ -798,6 +897,7 @@ function get_graph_components(E)
         j = 1
         while j ≤ size(stack, 1)
             Vⱼ = begin
+                P_C[end, :] .|= M[stack[j], :]
                 N = M[:, M[stack[j], :]]
                 if size(N, 2) == 0
                     zeros(Bool, m)
@@ -817,5 +917,5 @@ function get_graph_components(E)
         end
     end
 
-    return P
+    return (P, P_C)
 end
