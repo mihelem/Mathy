@@ -1,50 +1,8 @@
 using LinearAlgebra
 using SparseArrays
 using Parameters
-import Plots
 
-# verbosity utility
-function verba(verbosity, level, message)
-    if level ≤ verbosity
-        println(message)
-    end
-end
-# iteration recorder
-# against macro hygiene, it is creating a dictionary called memoranda
-macro init_memoria(expr)
-    quote
-        memoria = Dict{String, AbstractArray}()
-        for meme in $expr
-            memoria[meme] = []
-        end
-    end |> esc
-end
-macro memento(expr)
-    if (typeof(expr) === Expr) && (expr.head === :(=))
-        l_symbol = expr.args[1]
-        while (typeof(l_symbol) === Expr) && (l_symbol.head === :ref)
-            l_symbol = l_symbol.args[1]
-        end
-        quote
-            $(expr)
-            let meme = string($(Meta.quot(l_symbol)))
-                if haskey(memoria, meme)
-                    push!(memoria[meme], deepcopy($(l_symbol)))
-                end
-            end
-        end |> esc
-    end
-end
-macro get_memoria()
-    :(memoria) |> esc
-end
-macro get_result(args...)
-    result_expr = :(Dict{String, Any}())
-    for var in args
-        push!(result_expr.args, :($(string(var)) => $var) |> esc)
-    end
-    result_expr
-end
+include("utils.jl")
 
 # ----------------------------------------------------------------------- #
 
@@ -82,43 +40,6 @@ function run!(solver::OptimizationSolver{QMCFBProblem}, problem::QMCFBProblem)
     run!(solver.algorithm, problem, memoranda=solver.options.memoranda)
 end
 
-# ------------------------ Result of Computation ------------------------ #
-mutable struct QMCFBPResult <: OptimizationResult{QMCFBProblem}
-    result::Dict{String, Any}
-    memoria::Dict{String, Any}
-    plots::Dict{String, Plots.plot}
-
-    OptimizationResult{QMCFBProblem}(;memoria=nothing, plots=nothing, result=nothing) = begin
-        object = new()
-        @some object.memoria = memoria
-        @some object.plots = plots
-        @some object.result = result
-        object
-    end
-end
-function plot!(cur_plot::Plots.Plot, result::QMCFBPResult, meme::String)
-    if haskey(result.memoria, meme) === false
-        return
-    end
-    result.memoria[meme] |> (
-        data -> Plots.plot!(cur_plot, 1:size(data, 1), data))
-end
-function plot(result::QMCFBPResult, meme::String)
-    if haskey(result.memoria, meme) === false
-        return
-    end
-    result.memoria[meme] |> (
-        data -> Plots.plot(1:size(data, 1), data))
-end
-function set!(result::QMCFBPResult, meme::String, cur_plot::Plots.Plot)
-    result.plots[meme] = cur_plot
-    result
-end
-function set!(instance::OptimizationInstance{QMCFBProblem}, meme::String, cur_plot::Plots.Plot)
-    set!(instance.result, meme, cur_plot)
-    instance
-end
-
 # TODO: any exact "descent" (not really, it's a saddle point) method
 # --------------------- Primal Dual algorithm PD1 ------------------------- #
 mutable struct QMCFBPAlgorithmPD1 <: OptimizationAlgorithm{QMCFBProblem}
@@ -133,7 +54,7 @@ mutable struct QMCFBPAlgorithmPD1 <: OptimizationAlgorithm{QMCFBProblem}
     QMCFBPAlgorithmPD1(;
         descent=nothing, 
         verbosity=nothing, 
-        verba=nothing, 
+        my_verba=nothing, 
         max_iter=nothing, 
         ϵ₀=nothing, 
         ε=nothing, 
@@ -142,7 +63,7 @@ mutable struct QMCFBPAlgorithmPD1 <: OptimizationAlgorithm{QMCFBProblem}
         algorithm = new()
         algorithm.memorabilia = Set(["objective", "Π∇L", "∇L", "p", "normΠ∇L", "normΠ∇L_μ"])
 
-        set!(algorithm, descent=descent, verbosity=verbosity, verba=verba, max_iter=max_iter, ϵ₀=ϵ₀, ε=ε, p₀=p₀)
+        set!(algorithm, descent=descent, verbosity=verbosity, my_verba=my_verba, max_iter=max_iter, ϵ₀=ϵ₀, ε=ε, p₀=p₀)
     end
 end
 # about memorabilia
@@ -150,11 +71,10 @@ end
 # by now it is a set; in the future it could become a dictionary, since
 # to each variable in the mathematical domain we can have many different
 # names in the program
-
 function set!(algorithm::QMCFBPAlgorithmPD1; 
     descent=nothing, 
     verbosity=nothing, 
-    verba=nothing, 
+    my_verba=nothing, 
     max_iter=nothing, 
     ϵ₀=nothing, 
     ε=nothing, 
@@ -164,7 +84,7 @@ function set!(algorithm::QMCFBPAlgorithmPD1;
     if verbosity !== nothing
         algorithm.verba = ((level, message) -> verba(verbosity, level, message))
     end
-    @some algorithm.verba=verba
+    @some algorithm.verba=my_verba
     @some algorithm.max_iter=max_iter
     @some algorithm.ϵ₀=ϵ₀
     @some algorithm.ε=ε
@@ -188,8 +108,8 @@ function run!(algorithm::QMCFBPAlgorithmPD1, 𝔓::QMCFBProblem; memoranda=Set([
     Π∇! = (p, ∇L) -> begin
             x, ∇ₓL = get_x(p), get_x(∇L)
             𝔲, 𝔩 = (x .≥ u), (x .≤ l)
-            (a -> max(0., a)).(∇ₓL[𝔲])
-            (a -> min(0., a)).(∇ₓL[𝔩])
+            ∇ₓL[𝔲] = (a -> max(0., a)).(∇ₓL[𝔲])
+            ∇ₓL[𝔩] = (a -> min(0., a)).(∇ₓL[𝔩])
             ∇L
         end
 
@@ -237,7 +157,7 @@ mutable struct QMCFBPAlgorithmD1 <: OptimizationAlgorithm{QMCFBProblem}
     QMCFBPAlgorithmD1(;
         descent=nothing, 
         verbosity=nothing, 
-        verba=nothing, 
+        my_verba=nothing, 
         max_iter=nothing, 
         ϵₘ=nothing, 
         ε=nothing, 
@@ -247,14 +167,14 @@ mutable struct QMCFBPAlgorithmD1 <: OptimizationAlgorithm{QMCFBProblem}
         algorithm = new()
         algorithm.memorabilia = Set(["L", "∇L", "norm∇L", "x", "μ", "λ"])
 
-        set!(algorithm, descent=descent, verbosity=verbosity, verba=verba, max_iter=max_iter, ϵₘ=ϵₘ, ε=ε, p₀=p₀, cure_singularity=cure_singularity)
+        set!(algorithm, descent=descent, verbosity=verbosity, my_verba=my_verba, max_iter=max_iter, ϵₘ=ϵₘ, ε=ε, p₀=p₀, cure_singularity=cure_singularity)
     end
 
 end
 function set!(algorithm::QMCFBPAlgorithmD1; 
     descent=nothing, 
     verbosity=nothing, 
-    verba=nothing, 
+    my_verba=nothing, 
     max_iter=nothing, 
     ϵₘ=nothing, 
     ε=nothing, 
@@ -265,7 +185,7 @@ function set!(algorithm::QMCFBPAlgorithmD1;
     if verbosity !== nothing
         algorithm.verba = ((level, message) -> verba(verbosity, level, message))
     end
-    @some algorithm.verba=verba
+    @some algorithm.verba=my_verba
     @some algorithm.max_iter=max_iter
     @some algorithm.ϵₘ=ϵₘ
     @some algorithm.ε=ε
@@ -329,7 +249,7 @@ function run!(algorithm::QMCFBPAlgorithmD1, 𝔓::QMCFBProblem; memoranda=Set([]
     end
     # ∇L with respecto to μ, that is the constraint E*x(μ)-b
     function get_∇L(x)
-        return E*x-b
+        return to0.(E*x-b)
     end
     # ✓
     function get_ᾱs(Qx̃, Eᵀd)
@@ -414,7 +334,12 @@ function run!(algorithm::QMCFBPAlgorithmD1, 𝔓::QMCFBProblem; memoranda=Set([]
                 if isnan(Δα)
                     Δα = 0
                 end
-                if 0 ≤ Δα ≤ α₁-α₀
+                if to0(Δα) == 0.
+                    @memento μ[:] = μ + α₀*d
+                    @memento x[:] = x
+                    verba(3, "find_α: μ=$μ \nfind_α: Qx̃=$(get_Qx̃(μ)) \nfind_α: x=$x")
+                    return true
+                elseif 0 ≤ Δα ≤ α₁-α₀
                     @memento μ[:] = μ + (α₀+Δα)*d
                     @memento x[:] = get_x̅(get_Qx̃(μ), 𝔅)
                     verba(3, "find_α: μ=$μ \nfind_α: Qx̃=$(get_Qx̃(μ)) \nfind_α: x=$x")
@@ -718,7 +643,7 @@ function run!(algorithm::QMCFBPAlgorithmD2, 𝔓::QMCFBProblem)
         L = -get_L()
         L₀ = L
         L̄ = L
-        while norm(P∇L) > ϵ
+        while norm(P∇L) > ε
             α, active_C = get_α(d)
             νᵣ[:] += α*d
 
@@ -769,6 +694,7 @@ function set!(algorithm::QMCFBPAlgorithmD3, 𝔓::QMCFBProblem)
 end
 function run!(algo::QMCFBPAlgorithmD3, 𝔓::QMCFBProblem)
     @unpack Q, q, l, u, E, b = 𝔓
+    ϵ = 1e-8 # todo all
     
     # Assumption : m ≤ n
     function split_eq_constraint(ϵ)
@@ -842,8 +768,8 @@ end
 
 # -------------- Quadratic Min Cost Flow Boxed Problem Generator ---------- #
 # TODO: Add custom active constraints %
-function generate_quadratic_min_cost_flow_boxed_problem(type, m, n; sing=0)
-    Q = spdiagm(0 => [sort(rand(type, n-sing), rev=true); zeros(type, sing)])
+function generate_quadratic_min_cost_flow_boxed_problem(type, m, n; singular=0)
+    Q = spdiagm(0 => [sort(rand(type, n-singular), rev=true); zeros(type, singular)])
     q = rand(eltype(Q), n)
     E = spzeros(Int8, m, n)
     for i=1:n
@@ -865,14 +791,14 @@ end
 
 # ----------- Quadratic Min Cost Flow Boxed Problem - Algorithm Tester ------------- #
 function get_test(algorithm::OptimizationAlgorithm{QMCFBProblem};
-    singular::Integer=0,
     m::Integer, n::Integer,
+    singular::Integer=0,
     𝔓::Union{Nothing, QMCFBProblem}=nothing,
     should_reduce::Bool=false,
     type::DataType=Float64)
 
     if 𝔓 === nothing
-        𝔓 = generate_quadratic_min_cost_flow_boxed_problem(type, m, n, sing=singular)
+        𝔓 = generate_quadratic_min_cost_flow_boxed_problem(type, m, n, singular=singular)
         if should_reduce == true
             𝔓 = get_reduced(𝔓)[1]
         end

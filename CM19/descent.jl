@@ -110,8 +110,10 @@ end
 # First Order Methods
 abstract type DescentMethod end
 
-struct GradientDescent <: DescentMethod
+mutable struct GradientDescent <: DescentMethod
     α
+
+    GradientDescent() = new(0.1)
 end
 init!(M::GradientDescent, f, ∇f, x) = M
 function step!(M::GradientDescent, f, ∇f, x)
@@ -123,6 +125,8 @@ mutable struct ConjugateGradientDescent <: DescentMethod
     d
     g
     line_search
+
+    ConjugateGradientDescent() = new()
 end
 function init!(M::ConjugateGradientDescent, f, ∇f, x)
     M.g = ∇f(x)
@@ -165,8 +169,13 @@ mutable struct NesterovMomentumDescent <: DescentMethod
     α # learning rate
     β # momentum decay
     v # momentum
+
+    NesterovMomentumDescent() = new(0.5, 0.1)
 end
 function init!(M::NesterovMomentumDescent, f, ∇f, x)
+    M.v = zeros(length(x))
+end
+function step!(M::NesterovMomentumDescent, f, ∇f, x)
     α, β, v = M.α, M.β, M.v
     v[:] = β*v - α*∇f(x + β*v)
     return x+v
@@ -176,6 +185,7 @@ mutable struct AdagradDescent <: DescentMethod
     α # learning rate
     ϵ # small value
     s # sum of squared gradient 
+
     AdagradDescent() = new(0.01, 1e-8)
 end
 function init!(M::AdagradDescent, f, ∇f, x)
@@ -193,6 +203,8 @@ mutable struct RMSPropDescent <: DescentMethod
     γ # decay
     ϵ # small value
     s # sum of squared gradient
+
+    RMSPropDescent() = new(0.01, 0.9, 1e-8, )
 end
 function init!(M::RMSPropDescent, f, ∇f, x)
     M.s = zeros(length(x))
@@ -210,6 +222,8 @@ mutable struct AdadeltaDescent <: DescentMethod
     ϵ # small value
     s # sum of squared gradients
     u # sum od squared gradients
+
+    AdadeltaDescent() = new(0.9, 0.9, 1e-8)
 end
 function init!(M::AdadeltaDescent, f, ∇f, x)
     M.s = zeros(length(x))
@@ -232,11 +246,13 @@ mutable struct AdamDescent <: DescentMethod
     k # step counter
     v # 1st moment estimate
     s # 2nd moment estimate
+
+    AdamDescent() = new(0.001, 0.9, 0.999, 1e-8)
 end
 function init!(M::AdamDescent, f, ∇f, x)
     M.k = 0
     M.v = zeros(length(x))
-    M.s = zeros(length(x))
+    M.s = zeros(length(x)) 
     return M
 end
 function step!(M::AdamDescent, f, ∇f, x)
@@ -301,7 +317,7 @@ function init!(M::NoisyDescent, f, ∇f, x)
     M.k = 1
     return M
 end
-function step!(M::NoisyDescent,f, ∇f, x)
+function step!(M::NoisyDescent, f, ∇f, x)
     x = step!(M.submethod, f, ∇f, x)
     σ = M.σ(M.k)
     x += σ.*randn(length(x))

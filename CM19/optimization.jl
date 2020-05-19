@@ -1,4 +1,5 @@
 using LinearAlgebra
+import Plots
 
 # TODO: here is just for a single assignment, 
 # need to be extended to handle general expressions
@@ -33,7 +34,40 @@ function set!(solver::OptimizationSolver{P};
     @some solver.options = options
 end
 
-abstract type OptimizationResult{Problem <: OptimizationProblem} end
+# ------------------------ Result of Computation ------------------------ #
+# if in need for specific results, substitute with
+# abstract type OptimizationResult{Problem <: OptimizationProblem}
+mutable struct OptimizationResult{Problem <: OptimizationProblem} 
+    result::Dict{String, Any}
+    memoria::Dict{String, Any}
+    plots::Dict{String, Plots.plot}
+
+    OptimizationResult{Problem}(;memoria=nothing, plots=nothing, result=nothing) where Problem  <: OptimizationProblem = begin
+        object = new()
+        @some object.memoria = memoria
+        @some object.plots = plots
+        @some object.result = result
+        object
+    end
+end
+function plot!(cur_plot::Plots.Plot, result::OptimizationResult, meme::String)
+    if haskey(result.memoria, meme) === false
+        return
+    end
+    result.memoria[meme] |> (
+        data -> Plots.plot!(cur_plot, 1:size(data, 1), data))
+end
+function plot(result::OptimizationResult, meme::String)
+    if haskey(result.memoria, meme) === false
+        return
+    end
+    result.memoria[meme] |> (
+        data -> Plots.plot(1:size(data, 1), data))
+end
+function set!(result::OptimizationResult, meme::String, cur_plot::Plots.Plot)
+    result.plots[meme] = cur_plot
+    result
+end
 
 mutable struct OptimizationInstance{Problem <: OptimizationProblem}
     problem::Problem
@@ -54,10 +88,13 @@ function set!(instance::OptimizationInstance{P};
     @some instance.result = result
     set!(instance.solver, algorithm=algorithm, options=options)
 end
-function run!(instance::OptimizationInstance{P}) where {P <: OptimizationProblem}
+function run!(instance::OptimizationInstance)
     set!(instance, result=run!(instance.solver, instance.problem))
 end
-
+function set!(instance::OptimizationInstance, meme::String, cur_plot::Plots.Plot)
+    set!(instance.result, meme, cur_plot)
+    instance
+end
 
 
 # ♂ TO BE ERASED (EXPERIMENTS)
