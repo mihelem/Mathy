@@ -150,8 +150,9 @@ mutable struct QMCFBPAlgorithmD1 <: OptimizationAlgorithm{QMCFBProblem}
     max_iter            # max number of iterations
     ϵₘ                  # error within which an element is considered 0
     ε                   # precision to which eq. constraint is to be satisfied
-    p₀                  # starting point
+    μ₀                  # starting point
     cure_singularity    # if true, approach iteratively a singular Q
+    plot_steps          # how many points to be used to draw the line search
 
     memorabilia # set of the name of variables that can be recorded during execution
     QMCFBPAlgorithmD1(;
@@ -161,13 +162,15 @@ mutable struct QMCFBPAlgorithmD1 <: OptimizationAlgorithm{QMCFBProblem}
         max_iter=nothing, 
         ϵₘ=nothing, 
         ε=nothing, 
-        p₀=nothing,
-        cure_singularity=nothing) = begin
+        μ₀=nothing,
+        cure_singularity=nothing,
+        plot_steps=nothing) = begin
 
         algorithm = new()
-        algorithm.memorabilia = Set(["L", "∇L", "norm∇L", "x", "μ", "λ"])
+        algorithm.memorabilia = Set(["L", "∇L", "norm∇L", "x", "μ", "λ", "α", "line_plot"])
 
-        set!(algorithm, descent=descent, verbosity=verbosity, my_verba=my_verba, max_iter=max_iter, ϵₘ=ϵₘ, ε=ε, p₀=p₀, cure_singularity=cure_singularity)
+        set!(algorithm, descent=descent, verbosity=verbosity, my_verba=my_verba, max_iter=max_iter, 
+            ϵₘ=ϵₘ, ε=ε, μ₀=μ₀, cure_singularity=cure_singularity, plot_steps=plot_steps)
     end
 
 end
@@ -178,8 +181,9 @@ function set!(algorithm::QMCFBPAlgorithmD1;
     max_iter=nothing, 
     ϵₘ=nothing, 
     ε=nothing, 
-    p₀=nothing,
-    cure_singularity=nothing)
+    μ₀=nothing,
+    cure_singularity=nothing,
+    plot_steps=0)
 
     @some algorithm.descent=descent
     if verbosity !== nothing
@@ -189,12 +193,15 @@ function set!(algorithm::QMCFBPAlgorithmD1;
     @some algorithm.max_iter=max_iter
     @some algorithm.ϵₘ=ϵₘ
     @some algorithm.ε=ε
-    algorithm.p₀=p₀
+    algorithm.μ₀=μ₀
     @some algorithm.cure_singularity = cure_singularity
+    algorithm.plot_steps = plot_steps
+
+    algorithm
 end
 function run!(algorithm::QMCFBPAlgorithmD1, 𝔓::QMCFBProblem; memoranda=Set([]))
     @unpack Q, q, l, u, E, b, reduced = 𝔓
-    @unpack descent, verba, max_iter, ϵₘ, ε, μ₀, cure_singularity = algorithm
+    @unpack descent, verba, max_iter, ϵₘ, ε, μ₀, cure_singularity, plot_steps = algorithm
     @init_memoria memoranda
 
     Q_diag = view(Q, [CartesianIndex(i, i) for i in 1:size(Q, 1)])
@@ -279,12 +286,13 @@ function run!(algorithm::QMCFBPAlgorithmD1, 𝔓::QMCFBProblem; memoranda=Set([]
         end)
     end
     # ✓
-    function exact_line_search!(x, μ, d, 𝔅)
+    function exact_line_search!(x, μ, d, 𝔅, plot_steps=1000)
         Eᵀμ, Eᵀd, dᵀb, Qx̃ = E'*μ, E'*d, d'*b, get_Qx̃(μ)
         ᾱs, 𝔩, 𝔲 = get_ᾱs(Qx̃, Eᵀd)
+
         function filter_inconsistent(P)
             inside = 𝔅[:, 2]
-            verba(4, "filter_inconsistent: siamo nelle regioni $(findall(in))")
+            verba(4, "filter_inconsistent: in the regions $(findall(inside))")
             verba(4, "filter_inconsistent: unfiltered=$([(p[1], p[2]) for p in P])")
             remove = zeros(Bool, size(P, 1))
             for i in 1:size(P, 1)
@@ -300,6 +308,16 @@ function run!(algorithm::QMCFBPAlgorithmD1, 𝔓::QMCFBProblem; memoranda=Set([]
         end
         P_ᾱs = filter_inconsistent(sortperm_ᾱs(ᾱs, 𝔩, 𝔲))
         verba(3, "exact_line_search: αs=$(ᾱs[P_ᾱs])")
+
+        ret = nothing
+        if plot_steps > 0
+            last_α = ᾱs[P_ᾱs[end]]
+            step_α = 1.01*last_α/plot_steps
+            ret = []
+            for α in (-0.01*last_α):step_α:last_α
+                push!(ret, get_L(get_x̅(μ+α*d), μ+α*d))
+            end
+        end
 
         # x(μ) is NaN when it is not a function, so pick the best representative
         # TODO: find x minimising norm(∇L)
@@ -328,19 +346,21 @@ function run!(algorithm::QMCFBPAlgorithmD1, 𝔓::QMCFBProblem; memoranda=Set([]
 
         function find_α!(μ, x, α₀, α₁)
             if any(𝔅[:, 2])
-                verba(3, "find_α: siamo nelle regioni $(findall(𝔅[:, 2]))")
+                verba(3, "find_α: in the regions $(findall(𝔅[:, 2]))")
                 Δα = (Eᵀd'*x - dᵀb) / (Eᵀd[𝔅[:, 2]]' * Q̃[𝔅[:, 2], 𝔅[:, 2]] * Eᵀd[𝔅[:, 2]])
                 verba(3, "find_α: Δα = $(Δα)")
                 if isnan(Δα)
-                    Δα = 0
+                    Δα = 0.
                 end
                 if to0(Δα) == 0.
-                    @memento μ[:] = μ + α₀*d
+                    @memento α = α₀
+                    @memento μ[:] = μ + α*d
                     @memento x[:] = x
                     verba(3, "find_α: μ=$μ \nfind_α: Qx̃=$(get_Qx̃(μ)) \nfind_α: x=$x")
                     return true
                 elseif 0 ≤ Δα ≤ α₁-α₀
-                    @memento μ[:] = μ + (α₀+Δα)*d
+                    @memento α = α₀+Δα
+                    @memento μ[:] = μ + α*d
                     @memento x[:] = get_x̅(get_Qx̃(μ), 𝔅)
                     verba(3, "find_α: μ=$μ \nfind_α: Qx̃=$(get_Qx̃(μ)) \nfind_α: x=$x")
                     return true
@@ -361,7 +381,7 @@ function run!(algorithm::QMCFBPAlgorithmD1, 𝔓::QMCFBProblem; memoranda=Set([]
                 resolved_nan = resolve_nan!(x)
                 if resolved_nan === true || resolved_nan === nothing
                     @memento μ[:] = μ̄
-                    return
+                    return ret
                 end
             end
 
@@ -390,7 +410,7 @@ function run!(algorithm::QMCFBPAlgorithmD1, 𝔓::QMCFBProblem; memoranda=Set([]
             resolved_nan = resolve_nan!(x)
             if resolved_nan === true || resolved_nan === nothing
                 @memento μ[:] = μ̄
-                return
+                return ret
             end
         end
     end
@@ -428,18 +448,16 @@ function run!(algorithm::QMCFBPAlgorithmD1, 𝔓::QMCFBProblem; memoranda=Set([]
         verba(1, "solve: |∇L| = $(norm∇L) \nsolve: L = $L\n")
         d = copy(∇L)
         ∇L₀ = copy(∇L)
-        # reset = reset₀
         counter = 0
         while (norm∇L ≥ ε) # && (L-L₀ ≥ ε*abs(L))
             if norm∇L < λ
                 @memento λ = update_λ!(λ, λ / 1.2)
             end
-            exact_line_search!(x̅, μ, d, 𝔅)
+            @memento line_plot = exact_line_search!(x̅, μ, d, 𝔅)
             verba(2, "solve: μ=$μ\nsolve: x=$x̅")
             ∇L₀, ∇L = ∇L, get_∇L(x̅)
             @memento norm∇L = norm(∇L)
             verba(4, "solve: dᵀ∇L = $(d'∇L)")
-            reset = reset-1
             d[:] = ∇L + d*(∇L'*∇L - ∇L'*∇L₀) / (∇L₀'*∇L₀)
             if d'*∇L < 0
                 d[:] = ∇L
@@ -457,7 +475,7 @@ function run!(algorithm::QMCFBPAlgorithmD1, 𝔓::QMCFBProblem; memoranda=Set([]
 
         @memento L = get_L(x̅, μ)
         verba(0, "solve: L = $L")
-        verba(0, "\nsolve: $counter iterazioni\n")
+        verba(0, "\nsolve: $counter iterations\n")
 
         return @get_result x̅ μ L ∇L λ
     end
@@ -892,3 +910,9 @@ function get_reduced(𝔓::QMCFBProblem)
             b[p_row], 
             true) for (p_row, p_col) in zip(eachcol(P_row), eachrow(P_col))]
 end
+
+# Example
+# include("mincostflow.jl")
+# algorithm = QMCFBPAlgorithmD1(descent=GradientDescent(), verbosity=0, max_iter=20, ϵₘ=1e-10, ε=1e-5, cure_singularity=false); test = get_test(algorithm, m=5, n=8, singular=0); run!(test)
+# θ = test.result.memoria["θ"]
+# do_plot = i -> Plots.plot([j for j in 1:length(θ[i])], θ[i])
