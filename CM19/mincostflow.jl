@@ -287,7 +287,7 @@ function run!(algorithm::QMCFBPAlgorithmD1, 𝔓::QMCFBProblem; memoranda=Set([]
     end
     # ✓
     function exact_line_search!(x, μ, d, 𝔅, plot_steps=1000)
-        Eᵀμ, Eᵀd, dᵀb, Qx̃ = E'*μ, E'*d, d'*b, get_Qx̃(μ)
+        Eᵀμ, Eᵀd, dᵀb, Qx̃ = E'μ, to0.(E'd), d'b, get_Qx̃(μ)
         ᾱs, 𝔩, 𝔲 = get_ᾱs(Qx̃, Eᵀd)
 
         function filter_inconsistent(P)
@@ -347,7 +347,7 @@ function run!(algorithm::QMCFBPAlgorithmD1, 𝔓::QMCFBProblem; memoranda=Set([]
         function find_α!(μ, x, α₀, α₁)
             if any(𝔅[:, 2])
                 verba(3, "find_α: in the regions $(findall(𝔅[:, 2]))")
-                Δα = (Eᵀd'*x - dᵀb) / (Eᵀd[𝔅[:, 2]]' * Q̃[𝔅[:, 2], 𝔅[:, 2]] * Eᵀd[𝔅[:, 2]])
+                Δα = (Eᵀd'x - dᵀb) / (Eᵀd[𝔅[:, 2]]' * Q̃[𝔅[:, 2], 𝔅[:, 2]] * Eᵀd[𝔅[:, 2]])
                 verba(3, "find_α: Δα = $(Δα)")
                 if isnan(Δα)
                     Δα = 0.

@@ -5,6 +5,7 @@
 using Parameters
 using LinearAlgebra
 using SparseArrays
+using DataStructures
 
 include("utils.jl")
 include("optimization.jl")
@@ -33,13 +34,23 @@ function run!(solver::OptimizationSolver{MQBProblem}, problem::MQBProblem)
     run!(solver.algorithm, problem, memoranda=solver.options.memoranda)
 end
 
+struct Oᾱ <: Base.Order.Ordering 
+    simeq
+end
+import Base.Order.lt
+lt(o::Oᾱ, a::Tuple{CartesianIndex{2}, AbstractFloat}, b::Tuple{CartesianIndex{2}, AbstractFloat}) = begin
+    o.simeq(a[2] , b[2]) ?
+        (a[1][2], a[1][1]) < (b[1][2], b[1][1]) :
+        a[2] < b[2]
+end
+
 mutable struct MQBPAlgorithmPG1 <: OptimizationAlgorithm{MQBProblem}
-    descent::DescentMethod
-    verba
-    max_iter
-    ε
-    ϵ₀
-    x₀
+    descent::DescentMethod      # 
+    verba                       # verbosity utility
+    max_iter                    #
+    ε                           # required: norm(∇f, ?) < ε
+    ϵ₀                          # abs error to which inequalities are satisfied
+    x₀                          # starting point
 
     memorabilia
     MQBPAlgorithmPG1(;
@@ -84,6 +95,8 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
 
     x = x₀ === nothing ? 0.5*(l+u) : x₀
     a::AbstractFloat ⪝ b::AbstractFloat = a ≤ b + ϵ₀
+    a::AbstractFloat ≃ b::AbstractFloat = abs(a-b) ≤ ϵ₀
+    to0 = (x::AbstractFloat -> x ≃ 0. ? 0. : x)
 
     get_Πx = x -> min.(max.(x, l), u)
     get_f = x -> 0.5*x'Q*x + q'x
@@ -95,6 +108,99 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
         𝔩, inc = x .⪝ l, Π∇f .> 0.
         Π∇f[(𝔲 .& dec) .| (𝔩 .& inc)] .= 0.
         Π∇f
+    end
+
+    function on_box_side(x)
+        𝔅 = [x .⪝ l   u .⪝ x]
+    end
+    on_u = 𝔅 -> 𝔅[:, 2]
+    on_l = 𝔅 -> 𝔅[:, 1]
+    # ᾱ is an α corresponding to the line crossing a side of the box
+    # assuming a valid  l .≤ x .≤ u
+    function get_ᾱs(x, d)
+        # 1 : getting inside
+        # 2 : going outside
+        ᾱs = zeros(eltype(d), length(d), 2) .- Inf
+
+        𝔩 = [d .> 0  d .< 0]        
+        ᾱs[𝔩] = ([l l][𝔩] - [x x][𝔩]) ./ [d d][𝔩]
+
+        𝔲 = [d .< 0  d .> 0]
+        ᾱs[𝔲] = ([u u][𝔲] - [x x][𝔲]) ./ [d d][𝔲]
+
+        return (ᾱs, 𝔩, 𝔲)
+    end
+    function filter_ᾱs(ᾱs)
+        F_ᾱs = findall( (0. .⪝ ᾱs .< Inf) .& (.~isnan.(ᾱs)) )
+    end
+
+    # First approach: sort all ᾱs, then: 1- scan 2-binary search
+    function sort_ᾱs(F_ᾱs, ᾱs)
+        P_ᾱs = sort(F_ᾱs, lt = (i, j) -> ᾱs[i] ≃ ᾱs[j] ? (i[2], i[1]) < (j[2], j[1]) : ᾱs[i] < ᾱs[j])
+    end
+    # Second approach:  since usually we'll stop at one of the first ᾱs,
+    #                   use a Priority Queue => ~ linear time
+    function filter_ᾱ(p::CartesianIndex{2}, 𝔅)
+        (p[2] == 1) == (𝔅[p[1], 1] | 𝔅[p[1], 2])
+    end
+    function priority_ᾱs(F_ᾱs, ᾱs)
+        pq = PriorityQueue{CartesianIndex{2}, Tuple{CartesianIndex{2}, AbstractFloat}}(Oᾱ(≃))
+        for i in F_ᾱs
+            pq[i] = (i, ᾱs[i])
+        end
+        pq
+    end
+    
+    function get_x(x, d, α, ᾱs)
+        x + d .* mid.(α, ᾱs[:, 1], ᾱs[:, 2])
+    end
+    function get_x(x, αd, 𝔅)
+        .~(𝔅[:, 1] .| 𝔅[:, 2]) |> 
+            𝔉 -> l.*𝔅[:, 1] + u.*𝔅[:, 2] + (x + αd).*𝔉
+    end
+
+    function line_search(pq::PriorityQueue{CartesianIndex{2}, Tuple{CartesianIndex{2}, AbstractFloat}}, x, d, 𝔩, 𝔲, 𝔅)
+        𝔉 = .~(𝔅[:, 1] .| 𝔅[:, 2])
+        d′ = d .* 𝔉
+        while length(pq) > 0
+            (i, ᾱ) = dequeue!(pq)
+            if filter_ᾱ(i, 𝔅) == false
+                continue
+            end
+
+            if i[2] == 1
+                𝔅[i[1], :] = [false false]
+                𝔉[i[1]] = true
+                d′[i[1]] = d[i[1]]
+            else
+                𝔅[i[1], :] = [𝔩[i]   𝔲[i]]
+                𝔉[i[1]] = false
+                d′[i[1]] = 0.
+            end
+
+            if (length(pq) > 0)
+                i′, ᾱ′ = peek(pq)
+                if (filter_ᾱ(i′, 𝔅) == false) || ((i′[2] == i[2]) && (ᾱ′ ≃ ᾱ))
+                    continue
+                end
+            end
+
+            x′ = get_x(x, ᾱ*d, 𝔅)
+
+            Δα = Q*d′ |> Qd -> (d′⋅q + x'Qd, Qd'd′)
+            if Δα[1] > 0
+                return x′
+            elseif length(pq) == 0 || ᾱ-Δα[1]/Δα[2] ⪝ peek(pq)[2]
+                return x′ - Δα[1] * d′ / Δα[2]
+            end
+        end
+    end
+    function line_search(P_ᾱs::Array{CartesianIndex{2}, 1}, ᾱs, x, d)
+
+    end
+
+    function local_search(x, 𝔅)
+
     end
 
     init!(descent, get_Πf, get_Π∇f, x)

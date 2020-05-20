@@ -40,3 +40,8 @@ macro get_result(args...)
     end
     result_expr
 end
+
+function mid(a, b, c)
+    a, b = a ≤ b ? (a, b) : (b, a)
+    min(max(a, c), b)
+end
