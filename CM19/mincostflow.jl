@@ -6,9 +6,9 @@ using Parameters
 
 using ..Optimization
 using ..Optimization.Utils
-import ..Optimization.run!
-import ..Optimization.set!
-import ..Optimization.MinQuadratic.get_test  # Necessary since we extend here the multiple dispatch
+import ..Optimization.run!                  # Necessary since we extend here the multiple dispatch
+import ..Optimization.set!                  # idem ^
+import ..Optimization.MinQuadratic.get_test # idem ^
 
 # ----------------------------------------------------------------------- #
 
@@ -488,7 +488,7 @@ end
 
 # WIP 
 # TODO: adapt to new framework
-# TODO: implement REAL projected gradient (the present one cannot work...)
+# TODO: implement REAL projected gradient (the present one is not a real projection...)
 # ---------------------------- Dual algorithm D2 ----------------------------- #
 # Equality and Box Constraints dualised
 mutable struct QMCFBPAlgorithmD2 <: OptimizationAlgorithm{QMCFBProblem}

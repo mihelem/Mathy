@@ -96,25 +96,23 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
     @init_memoria memoranda
 
     x = (x₀ === nothing) ? 0.5*(l+u) : x₀
-    a::AbstractFloat ⪝ b::AbstractFloat = a ≤ b + ϵ₀
-    a::AbstractFloat ≃ b::AbstractFloat = abs(a-b) ≤ ϵ₀
-    to0 = (x::AbstractFloat -> x ≃ 0. ? 0. : x)
+    a::AbstractFloat ⪝ b::AbstractFloat = a ≤ b + ϵ₀        # \simless
+    a::AbstractFloat ≃ b::AbstractFloat = abs(a-b) ≤ ϵ₀     # \simeq
+    to0 = (x::AbstractFloat -> (x ≃ 0.0) ? 0.0 : x)
 
     # Box Projectors
     # Coordinate Space
     Π = (x, l, u) -> ((u .⪝ x) .| (x .⪝ l))
     Π! = (x, l, u) -> (x[:] = min.(max.(x, l), u))
-    # Tanget Space
-    ΠᶜT = (d, x, l, u) -> begin
-        𝔲, dec = u .⪝ x, d .> 0.
-        𝔩, inc = x .⪝ l, d .< 0.
+    # Tangent Space
+    ΠᶜT = (d, x, l, u) -> begin                             # \Pi \^c T
+        𝔲, dec = (u .⪝ x), (d .> 0.0)
+        𝔩, inc = (x .⪝ l), (d .< 0.0)
         (𝔲 .& dec) .| (𝔩 .& inc)
     end
-    ΠT = (d, x, l, u) -> begin
-        .~ΠᶜT(d, x, l, u)
-    end
+    ΠT = (d, x, l, u) -> .~ΠᶜT(d, x, l, u)
     ΠT! = (d, x, l, u) -> begin
-        d[ΠᶜT(d, x, l, u)] .= 0.
+        d[ΠᶜT(d, x, l, u)] .= 0.0
         d
     end
 
@@ -130,163 +128,89 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
         -ΠT!(-∇f, x, l, u)
     end
 
-
-    function on_box_side(x)
-        𝔅 = [x .⪝ l   u .⪝ x]
-    end
-    on_u = 𝔅 -> 𝔅[:, 2]
-    on_l = 𝔅 -> 𝔅[:, 1]
     # ᾱ is an α corresponding to the line crossing a side of the box
     # assuming a valid  l .≤ x .≤ u
-    function get_ᾱs(x, d, l, u)
-        # 1 : getting inside
-        # 2 : going outside
-        ᾱs = zeros(eltype(d), length(d), 2) .- Inf
 
-        𝔩 = [d .> 0  d .< 0]        
-        ᾱs[𝔩] = ([l l][𝔩] - [x x][𝔩]) ./ [d d][𝔩]
+    # ----------- Simpler Approach ----------- #
+    function get_Δx′(x, d, l, u)
+        Δx = -x
+        (d .> 0.0) |> (inc -> Δx[inc] += u[inc])
+        (d .< 0.0) |> (dec -> Δx[dec] += l[dec])
+        Δx
+    end
+    function line_search′(pq::PriorityQueue, x, Δx, d, Q, q, Qx)
+        𝔐 = .~zeros(Bool, length(x))                             # 𝔐 :: \frakM : moving coordinates
+        Δ1 = d.*q + d.*Qx
+        dQ = d.*Q
+        Δα = [sum(Δ1), sum(dQ*d)]
 
-        𝔲 = [d .< 0  d .> 0]
-        ᾱs[𝔲] = ([u u][𝔲] - [x x][𝔲]) ./ [d d][𝔲]
-
-        return (ᾱs, 𝔩, 𝔲)
-    end
-    function filter_ᾱs(ᾱs, min_α=-100*ϵ₀, max_α=Inf)
-        F_ᾱs = findall( (ᾱs .> min_α) .& (ᾱs .< max_α) .& (.~isnan.(ᾱs)) )
-    end
-
-    # First approach: sort all ᾱs, then: 1- scan 2-binary search
-    function sort_ᾱs(F_ᾱs, ᾱs)
-        P_ᾱs = sort(F_ᾱs, lt = (i, j) -> ᾱs[i] ≃ ᾱs[j] ? (i[2], i[1]) < (j[2], j[1]) : ᾱs[i] < ᾱs[j])
-    end
-    # Second approach:  since usually we'll stop at one of the first ᾱs,
-    #                   use a Priority Queue => ~ linear time
-    function filter_ᾱ(p::CartesianIndex{2}, 𝔅)
-        (p[2] == 1) == (𝔅[p[1], 1] | 𝔅[p[1], 2])
-    end
-    function priority_ᾱs(F_ᾱs, ᾱs)
-        pq = PriorityQueue{CartesianIndex{2}, Tuple{CartesianIndex{2}, AbstractFloat}}(Oᾱ(≃))
-        for i in F_ᾱs
-            pq[i] = (i, ᾱs[i])
-        end
-        pq
-    end
-    
-    function get_x(x, d, α, ᾱs)
-        x + d .* mid.(α, ᾱs[:, 1], ᾱs[:, 2])
-    end
-    function get_x(x, αd, 𝔅)
-        .~(𝔅[:, 1] .| 𝔅[:, 2]) |> 
-            𝔉 -> l.*𝔅[:, 1] + u.*𝔅[:, 2] + (x + αd).*𝔉
-    end
-
-    function line_search(pq::PriorityQueue{CartesianIndex{2}, Tuple{CartesianIndex{2}, AbstractFloat}}, x, d, Q, q, 𝔩, 𝔲, 𝔅)
-        𝔉 = .~(𝔅[:, 1] .| 𝔅[:, 2])
-        verba(1, "line_search : $(count(𝔉)) inactive")
-        d′ = d .* 𝔉
-        if count(𝔉) > 0
-            Δα = (Q*d′ |> Qd -> (d′⋅q + x'Qd, Qd'd′))
-            if Δα[2] == 0. 
-                verba(1, "line_search : d⋅Qd = $(Δα)") 
-            end
-            if Δα[1] > 0.
-                return x
-            elseif length(pq) == 0 || -Δα[1]/Δα[2] ⪝ peek(pq)[2][2]
-                return x - Δα[1] * d′ / Δα[2]
-            end
-        end
+        x′ = copy(x)
         while length(pq) > 0
-            i, ᾱ = peek(pq)[2]
-            dequeue!(pq)
-            if filter_ᾱ(i, 𝔅) == false
-                continue
+            if Δα[1] ≥ 0.0
+                break
             end
 
-            if i[2] == 1
-                𝔅[i[1], :] = [false false]
-                𝔉[i[1]] = true
-                d′[i[1]] = d[i[1]]
+            α = - Δα[1] / Δα[2]
+            i, ᾱ = peek(pq); dequeue!(pq)
+            if α ≤ ᾱ
+                x′[𝔐] += α*d[𝔐]
+                break
             else
-                𝔅[i[1], :] = [𝔩[i]   𝔲[i]]
-                𝔉[i[1]] = false
-                d′[i[1]] = 0.
+                Δα[2] += dQ[i, i]*d[i] - 2.0*sum(dQ[𝔐,i]*d[i])
+                𝔐[i] = false
+                dQ[𝔐, i]*Δx[i] |> 
+                    Δ -> (Δ1[𝔐] += Δ; Δα[1] += sum(Δ) - Δ1[i])
+                x′[i] += Δx[i]
             end
+        end
 
-            if (length(pq) > 0)
-                i′, ᾱ′ = peek(pq)[2]
-                if (filter_ᾱ(i′, 𝔅) == false) || ((i′[2] == i[2]) && (ᾱ′ ≃ ᾱ))
-                    continue
+        return (x′, 𝔐)
+    end
+    function local_search′(x, Q, q, l, u, max_iter, stop_on_cross=true)
+        x′ = copy(x)
+
+        g′, g = Q*x+q, zeros(eltype(x), length(x)) .+ Inf
+        d = -g′
+        for i in 1:max_iter
+            𝔐 = (ΠT(d, x, l, u) .& .~((d / norm(d, Inf)) .≃ 0.0))
+            norm_Πg′ = norm(g[𝔐], Inf)
+            if norm_Πg′ < ε || count(𝔐) == 0
+                break
+            end
+            
+            ᾱ = minimum(get_Δx′(x′[𝔐], d[𝔐], l[𝔐], u[𝔐]) ./ d[𝔐])
+            Δα = (d[𝔐]'q[𝔐] + d[𝔐]'Q[𝔐, :]*x′, d'Q*d)
+            α = - Δα[1] / Δα[2]
+            if Δα[1] ≥ 0.0
+                verba(1, "local_search′ : something went wrong, I feel stiff")
+            elseif α ≤ ᾱ
+                x′[𝔐] += α*d[𝔐]
+            else
+                x′[𝔐] += ᾱ*d[𝔐]
+                if stop_on_cross
+                    break
                 end
             end
 
-            x′ = get_x(x, ᾱ*d, 𝔅)
-            if count(𝔉) == 0
-                return x′
-            end
-            verba(1, "line_search : $(count(𝔉)) inactive")
-            Δα = (Q*d′ |> Qd -> (d′⋅q + x'Qd, Qd'd′))
-            if Δα[2] == 0.
-                verba(1, "line_search : d⋅Qd = $(Δα)")
-            end
-            if Δα[1] > 0.
-                return x′
-            elseif length(pq) == 0 || ᾱ-Δα[1]/Δα[2] ⪝ peek(pq)[2][2]
-                return x′ - Δα[1] * d′ / Δα[2]
-            end
-        end
-        return x
-    end
-    function line_search(P_ᾱs::Array{CartesianIndex{2}, 1}, ᾱs, x, d)
-
-    end
-
-    # Projected Conjugate Gradient with stop when crossing border
-    function local_search(x, Q, q, l, u, max_iter, crossstop=true)
-        x = get_Πx(x, l, u)
-        g = get_Π∇f(x, Q, q, l, u)
-        d = -g
-        for i in 1:max_iter
-            ᾱs = (get_ᾱs(x, d, l, u)[1] |> ᾱs -> ᾱs[filter_ᾱs(ᾱs)])
-            ᾱ = length(ᾱs) == 0 ? Inf : minimum(ᾱs)
-            Δα = (d'q + d'Q*x, d'Q*d)
-            if Δα[1] > 0
-                break
-            end
-            if Δα[2] == 0.
-                verba(1, "local_search : d⋅Qd = 0.")
-            end
-            α = - (d'q + d'Q*x) / (d'Q*d)
-            if α ⪝ 0.
-                break
-            end
-            x[:] = get_Πx(x + min(α, ᾱ)*d, l, u)
-            if α ⪝ ᾱ
-                break
-            end
-
-            g′ = get_Π∇f(x, Q, q, l, u)
-            β = max(0, g′⋅(g′-g) / g⋅g)
+            g′[:], g[:] = Q*x′+q, g′
+            β = max(0.0, g′⋅(g′-g) / g⋅g)
             d[:] = -g′ + β*d
-            g = g′
         end
-        x
+
+        return x′
     end
+    function step′(x, d, Q, q, l, u)
+        𝔐 = (ΠT(d, x, l, u) .& .~((d / norm(d, Inf)) .≃ 0.0))      # 𝔐 :: \frakM : moving coordinates
+        x′, d′, l′, u′, Q′, q′ = x[𝔐], d[𝔐], l[𝔐], u[𝔐], Q[𝔐, 𝔐], q[𝔐]
+        
+        Δx′ = get_Δx′(x′, d′, l′, u′)
+        ᾱs = Δx′ ./ d′
+        pq = PriorityQueue(zip([1:length(𝔐)+1;], [ᾱs; Inf]))
 
-    function step(x, d, Q, q, l, u)
-        (ᾱs, 𝔩, 𝔲) = get_ᾱs(x, d, l, u)
-        if any(isnan.(ᾱs))
-            verba(0, "step : ERROR: got an ᾱ=NaN")
-        end
-        F_ᾱs = filter_ᾱs(ᾱs)
-        pq = priority_ᾱs(F_ᾱs, ᾱs)
-        𝔅 = on_box_side(x)
-        x = line_search(pq, x, d, Q, q, 𝔩, 𝔲, 𝔅)
-
-        𝔉 = .~(𝔅[:, 1] .| 𝔅[:, 2])
-        if any(𝔉)
-            x[𝔉] = local_search(x[𝔉], Q[𝔉, 𝔉], q[𝔉] + Q[𝔉, .~𝔉]*x[.~𝔉], l[𝔉], u[𝔉], 50)
-        end
-        x
+        x′, 𝔐′ = line_search′(pq, x′, Δx′, d′, Q′, q′, Q[𝔐, :]*x)
+        x[𝔐] = x′
+        x[𝔐][𝔐′] = local_search′(x′[𝔐′], Q′[𝔐′, 𝔐′], q′[𝔐′] + Q′[𝔐′, .~𝔐′]*x′[.~𝔐′], l′[𝔐′], u′[𝔐′], 50)
+        return x
     end
 
     function solve(descent, x, Q, q, l, u)
@@ -297,9 +221,8 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
         g = get_∇f(x, Q, q)
         @memento Π∇f = -ΠT!(-g, x, l, u)
         @memento normΠ∇f = norm(Π∇f, Inf)        
-        @memento d = -g
-        @memento Πd = -Π∇f
         verba(1, "||Π∇f|| : $normΠ∇f")
+        @memento d = -g        
         for i in 1:max_iter
             if normΠ∇f < ε
                 verba(0, "\nIterations: $i\n")
@@ -310,17 +233,16 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
                 @memento x[:] = get_Πx(step!(descent, x -> get_Πf(x, l, u), x -> get_Π∇f(x, Q, q, l, u), x), l, u)
                 @memento Π∇f[:] = get_Π∇f(x, Q, q, l, u)
             else
-                @memento x[:] = get_Πx(step(x, d, Q, q, l, u), l, u)
+                @memento x[:] = get_Πx(step′(x, d, Q, q, l, u), l, u)
                 g′ = get_∇f(x, Q, q)
                 @memento Π∇f[:] = -ΠT!(-g′, x, l, u)
                 # g[:] = -ΠT!(-g, x, l, u)
                 @memento β = g′⋅(g′-g) / g⋅g
-                β = max(0. , isnan(β) ? 0. : β)
-                @memento d′[:] = -g′ + β*d′
-                d[:] = d′
-                @memento d[:] = ΠT!(d, x, l, u)
+                β = max(0. , isnan(β) ? 0.0 : β)
+                @memento d[:] = -g′ + β*d
                 g[:] = g′
             end
+
             verba(2, "x : $x")
             verba(2, "Π∇f : $Π∇f")
             @memento normΠ∇f = norm(Π∇f, Inf)
