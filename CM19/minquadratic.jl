@@ -1,15 +1,15 @@
-# Prova risolutiva per
-# minₓ q'x     with
-# Ex = b   and   l .≤ x .≤ u 
-# L = q'x + μ'(E*x-b)
+module MinQuadratic
+
 using Parameters
 using LinearAlgebra
 using SparseArrays
 using DataStructures
 
-include("utils.jl")
-include("optimization.jl")
-include("descent.jl")
+using ..Optimization
+using ..Optimization.Utils
+import ..Optimization.run!      # Necessary since we extend here the multiple dispatch
+import ..Optimization.set!      # idem
+using ..Optimization.Descent
 
 # ---------------- (Convex) Quadratic Boxed Problem ------------------ #
 # minₓ ½ x'Qx + q'x         where
@@ -43,7 +43,9 @@ lt(o::Oᾱ, a::Tuple{CartesianIndex{2}, AbstractFloat}, b::Tuple{CartesianIndex
         (a[1][2], a[1][1]) < (b[1][2], b[1][1]) :
         a[2] < b[2]
 end
-
+# Dummy struct, since for projected methods the step! should need a 
+# signature different from the other DescentMethod s
+mutable struct QuadraticBoxPCGDescent <: DescentMethod end
 mutable struct MQBPAlgorithmPG1 <: OptimizationAlgorithm{MQBProblem}
     descent::DescentMethod      # 
     verba                       # verbosity utility
@@ -63,7 +65,7 @@ mutable struct MQBPAlgorithmPG1 <: OptimizationAlgorithm{MQBProblem}
         x₀=nothing) = begin
 
         algorithm = new()
-        algorithm.memorabilia = Set(["normΠ∇f", "Π∇f", "x", "f"])
+        algorithm.memorabilia = Set(["normΠ∇f", "Π∇f", "x", "f", "d"])
         set!(algorithm, descent=descent, verbosity=verbosity, my_verba=my_verba, max_iter=max_iter, ε=ε, ϵ₀=ϵ₀, x₀=x₀)
     end
 end
@@ -93,22 +95,41 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
     @unpack descent, max_iter, verba, ε, ϵ₀, x₀ = algorithm
     @init_memoria memoranda
 
-    x = x₀ === nothing ? 0.5*(l+u) : x₀
+    x = (x₀ === nothing) ? 0.5*(l+u) : x₀
     a::AbstractFloat ⪝ b::AbstractFloat = a ≤ b + ϵ₀
     a::AbstractFloat ≃ b::AbstractFloat = abs(a-b) ≤ ϵ₀
     to0 = (x::AbstractFloat -> x ≃ 0. ? 0. : x)
 
-    get_Πx = x -> min.(max.(x, l), u)
-    get_f = x -> 0.5*x'Q*x + q'x
-    get_Πf = get_f ∘ get_Πx
-    get_∇f = x -> Q*x+q
-    get_Π∇f = x -> begin
-        Π∇f = get_∇f(get_Πx(x))
-        𝔲, dec = u .⪝ x, Π∇f .< 0.
-        𝔩, inc = x .⪝ l, Π∇f .> 0.
-        Π∇f[(𝔲 .& dec) .| (𝔩 .& inc)] .= 0.
-        Π∇f
+    # Box Projectors
+    # Coordinate Space
+    Π = (x, l, u) -> ((u .⪝ x) .| (x .⪝ l))
+    Π! = (x, l, u) -> (x[:] = min.(max.(x, l), u))
+    # Tanget Space
+    ΠᶜT = (d, x, l, u) -> begin
+        𝔲, dec = u .⪝ x, d .> 0.
+        𝔩, inc = x .⪝ l, d .< 0.
+        (𝔲 .& dec) .| (𝔩 .& inc)
     end
+    ΠT = (d, x, l, u) -> begin
+        .~ΠᶜT(d, x, l, u)
+    end
+    ΠT! = (d, x, l, u) -> begin
+        d[ΠᶜT(d, x, l, u)] .= 0.
+        d
+    end
+
+    # 
+    get_Πx = (x, l, u) -> min.(max.(x, l), u)
+    get_f = (Πx, Q, q) -> 0.5*Πx'Q*Πx + q'Πx
+    get_Πf = (x, Q, q, l, u) -> get_f(get_Πx(x, l, u), Q, q)
+    get_∇f = (Πx, Q, q) -> Q*Πx+q
+
+    get_Π∇f = (x, Q, q, l, u) -> begin
+        Πx = get_Πx(x, l, u)
+        ∇f = get_∇f(Πx, Q, q)
+        -ΠT!(-∇f, x, l, u)
+    end
+
 
     function on_box_side(x)
         𝔅 = [x .⪝ l   u .⪝ x]
@@ -117,7 +138,7 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
     on_l = 𝔅 -> 𝔅[:, 1]
     # ᾱ is an α corresponding to the line crossing a side of the box
     # assuming a valid  l .≤ x .≤ u
-    function get_ᾱs(x, d)
+    function get_ᾱs(x, d, l, u)
         # 1 : getting inside
         # 2 : going outside
         ᾱs = zeros(eltype(d), length(d), 2) .- Inf
@@ -130,8 +151,8 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
 
         return (ᾱs, 𝔩, 𝔲)
     end
-    function filter_ᾱs(ᾱs)
-        F_ᾱs = findall( (0. .⪝ ᾱs .< Inf) .& (.~isnan.(ᾱs)) )
+    function filter_ᾱs(ᾱs, min_α=-100*ϵ₀, max_α=Inf)
+        F_ᾱs = findall( (ᾱs .> min_α) .& (ᾱs .< max_α) .& (.~isnan.(ᾱs)) )
     end
 
     # First approach: sort all ᾱs, then: 1- scan 2-binary search
@@ -159,11 +180,24 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
             𝔉 -> l.*𝔅[:, 1] + u.*𝔅[:, 2] + (x + αd).*𝔉
     end
 
-    function line_search(pq::PriorityQueue{CartesianIndex{2}, Tuple{CartesianIndex{2}, AbstractFloat}}, x, d, 𝔩, 𝔲, 𝔅)
+    function line_search(pq::PriorityQueue{CartesianIndex{2}, Tuple{CartesianIndex{2}, AbstractFloat}}, x, d, Q, q, 𝔩, 𝔲, 𝔅)
         𝔉 = .~(𝔅[:, 1] .| 𝔅[:, 2])
+        verba(1, "line_search : $(count(𝔉)) inactive")
         d′ = d .* 𝔉
+        if count(𝔉) > 0
+            Δα = (Q*d′ |> Qd -> (d′⋅q + x'Qd, Qd'd′))
+            if Δα[2] == 0. 
+                verba(1, "line_search : d⋅Qd = $(Δα)") 
+            end
+            if Δα[1] > 0.
+                return x
+            elseif length(pq) == 0 || -Δα[1]/Δα[2] ⪝ peek(pq)[2][2]
+                return x - Δα[1] * d′ / Δα[2]
+            end
+        end
         while length(pq) > 0
-            (i, ᾱ) = dequeue!(pq)
+            i, ᾱ = peek(pq)[2]
+            dequeue!(pq)
             if filter_ᾱ(i, 𝔅) == false
                 continue
             end
@@ -179,53 +213,127 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
             end
 
             if (length(pq) > 0)
-                i′, ᾱ′ = peek(pq)
+                i′, ᾱ′ = peek(pq)[2]
                 if (filter_ᾱ(i′, 𝔅) == false) || ((i′[2] == i[2]) && (ᾱ′ ≃ ᾱ))
                     continue
                 end
             end
 
             x′ = get_x(x, ᾱ*d, 𝔅)
-
-            Δα = Q*d′ |> Qd -> (d′⋅q + x'Qd, Qd'd′)
-            if Δα[1] > 0
+            if count(𝔉) == 0
                 return x′
-            elseif length(pq) == 0 || ᾱ-Δα[1]/Δα[2] ⪝ peek(pq)[2]
+            end
+            verba(1, "line_search : $(count(𝔉)) inactive")
+            Δα = (Q*d′ |> Qd -> (d′⋅q + x'Qd, Qd'd′))
+            if Δα[2] == 0.
+                verba(1, "line_search : d⋅Qd = $(Δα)")
+            end
+            if Δα[1] > 0.
+                return x′
+            elseif length(pq) == 0 || ᾱ-Δα[1]/Δα[2] ⪝ peek(pq)[2][2]
                 return x′ - Δα[1] * d′ / Δα[2]
             end
         end
+        return x
     end
     function line_search(P_ᾱs::Array{CartesianIndex{2}, 1}, ᾱs, x, d)
 
     end
 
-    function local_search(x, 𝔅)
+    # Projected Conjugate Gradient with stop when crossing border
+    function local_search(x, Q, q, l, u, max_iter, crossstop=true)
+        x = get_Πx(x, l, u)
+        g = get_Π∇f(x, Q, q, l, u)
+        d = -g
+        for i in 1:max_iter
+            ᾱs = (get_ᾱs(x, d, l, u)[1] |> ᾱs -> ᾱs[filter_ᾱs(ᾱs)])
+            ᾱ = length(ᾱs) == 0 ? Inf : minimum(ᾱs)
+            Δα = (d'q + d'Q*x, d'Q*d)
+            if Δα[1] > 0
+                break
+            end
+            if Δα[2] == 0.
+                verba(1, "local_search : d⋅Qd = 0.")
+            end
+            α = - (d'q + d'Q*x) / (d'Q*d)
+            if α ⪝ 0.
+                break
+            end
+            x[:] = get_Πx(x + min(α, ᾱ)*d, l, u)
+            if α ⪝ ᾱ
+                break
+            end
 
+            g′ = get_Π∇f(x, Q, q, l, u)
+            β = max(0, g′⋅(g′-g) / g⋅g)
+            d[:] = -g′ + β*d
+            g = g′
+        end
+        x
     end
 
-    init!(descent, get_Πf, get_Π∇f, x)
-    @memento Π∇f = get_Π∇f(x)
-    @memento normΠ∇f = norm(Π∇f, Inf)
-    verba(1, "||Π∇f|| : $normΠ∇f")
-    for i in 1:max_iter
-        if normΠ∇f < ε
-            verba(0, "\nIterations: $i\n")
-            break
+    function step(x, d, Q, q, l, u)
+        (ᾱs, 𝔩, 𝔲) = get_ᾱs(x, d, l, u)
+        if any(isnan.(ᾱs))
+            verba(0, "step : ERROR: got an ᾱ=NaN")
+        end
+        F_ᾱs = filter_ᾱs(ᾱs)
+        pq = priority_ᾱs(F_ᾱs, ᾱs)
+        𝔅 = on_box_side(x)
+        x = line_search(pq, x, d, Q, q, 𝔩, 𝔲, 𝔅)
+
+        𝔉 = .~(𝔅[:, 1] .| 𝔅[:, 2])
+        if any(𝔉)
+            x[𝔉] = local_search(x[𝔉], Q[𝔉, 𝔉], q[𝔉] + Q[𝔉, .~𝔉]*x[.~𝔉], l[𝔉], u[𝔉], 50)
+        end
+        x
+    end
+
+    function solve(descent, x, Q, q, l, u)
+        if typeof(descent) !== QuadraticBoxPCGDescent
+            init!(descent, x -> get_Πf(x, l, u), x -> get_Π∇f(x, Q, q, l, u), x)
+        end
+        x[:] = get_Πx(x, l, u)
+        g = get_∇f(x, Q, q)
+        @memento Π∇f = -ΠT!(-g, x, l, u)
+        @memento normΠ∇f = norm(Π∇f, Inf)        
+        @memento d = -g
+        @memento Πd = -Π∇f
+        verba(1, "||Π∇f|| : $normΠ∇f")
+        for i in 1:max_iter
+            if normΠ∇f < ε
+                verba(0, "\nIterations: $i\n")
+                break
+            end
+
+            if typeof(descent) !== QuadraticBoxPCGDescent
+                @memento x[:] = get_Πx(step!(descent, x -> get_Πf(x, l, u), x -> get_Π∇f(x, Q, q, l, u), x), l, u)
+                @memento Π∇f[:] = get_Π∇f(x, Q, q, l, u)
+            else
+                @memento x[:] = get_Πx(step(x, d, Q, q, l, u), l, u)
+                g′ = get_∇f(x, Q, q)
+                @memento Π∇f[:] = -ΠT!(-g′, x, l, u)
+                # g[:] = -ΠT!(-g, x, l, u)
+                @memento β = g′⋅(g′-g) / g⋅g
+                β = max(0. , isnan(β) ? 0. : β)
+                @memento d′[:] = -g′ + β*d′
+                d[:] = d′
+                @memento d[:] = ΠT!(d, x, l, u)
+                g[:] = g′
+            end
+            verba(2, "x : $x")
+            verba(2, "Π∇f : $Π∇f")
+            @memento normΠ∇f = norm(Π∇f, Inf)
+            verba(1, "||Π∇f|| : $normΠ∇f")
         end
 
-        @memento x = get_Πx(step!(descent, get_Πf, get_Π∇f, x))
-        verba(2, "x : $x")
-
-        @memento Π∇f = get_Π∇f(x)
-        verba(2, "Π∇f : $Π∇f")
-        @memento normΠ∇f = norm(Π∇f, Inf)
-        verba(1, "||Π∇f|| : $normΠ∇f")
+        @memento f = get_f(x, Q, q)
+        verba(0, "f = $f")
+        result = @get_result x Π∇f normΠ∇f f
+        OptimizationResult{MQBProblem}(memoria=@get_memoria, result=result)
     end
 
-    @memento f = get_f(x)
-    verba(0, "f = $f")
-    result = @get_result x Π∇f normΠ∇f f
-    OptimizationResult{MQBProblem}(memoria=@get_memoria, result=result)
+    solve(descent, x, Q, q, l, u)
 end
 
 # -------------- Quadratic Boxed Problem Generator -------------- #
@@ -235,7 +343,7 @@ function generate_quadratic_boxed_problem(type, n; active=0, singular=0)
     x = rand(type, n)
     q = -E*x
     q = [q; zeros(type, singular)]
-    l, u = -10.0*rand(type, n)+x, 10.0*rand(type, n)+x
+    l, u = -10.0*rand(type, n) + x, 10.0*rand(type, n) + x
     active = min(active, n)
     l[n-active+1:n] .-= 11.
     u[n-active+1:n] .-= 11.
@@ -256,7 +364,7 @@ function get_test(algorithm::OptimizationAlgorithm{MQBProblem};
     end
 
     instance = OptimizationInstance{MQBProblem}()
-    set!(instance, 
+    Optimization.set!(instance, 
         problem=𝔓, 
         algorithm=algorithm, 
         options=MQBPSolverOptions(),
@@ -264,8 +372,11 @@ function get_test(algorithm::OptimizationAlgorithm{MQBProblem};
     return instance
 end
 
+export set!, run!, QuadraticBoxPCGDescent, MQBProblem, MQBPSolverOptions, MQBPAlgorithmPG1, generate_quadratic_boxed_problem, get_test
+end     # end module MinQuadratic
+
 #   Usage example
-# include("minquadratic.jl")
+# include("minquadratic.jl")   # Or using Revise for tracking changes to files while developing
 #   then
 # algorithm = MQBPAlgorithmPG1(descent=AdagradDescent(), verbosity=1, max_iter=1000, ε=1e-7, ϵ₀=0.)
 # test = get_test(algorithm, n=10)

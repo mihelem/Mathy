@@ -1,3 +1,5 @@
+module Numerical
+
 using LinearAlgebra
 
 # Naive implementations of Numerical Analysis algos
@@ -417,3 +419,9 @@ function test_bi(m, n, d=1., ϵ=1e-6)
     return (A, x, U, V, J)
 end
 
+export  bidiagonal_decomposition_handmade2, bidiagonal_decomposition_handmade, GMRES_naive, Arnoldi_naive,
+        Arnoldi_iterations, rayleigh_inverse_iteration, rayleigh_iteration, hessenberg_via_householder,
+        choleski_factorisation, gaussian_elimination_row_pivot, gaussian_elimination, hessenberg_gram_schmidt,
+        QR_gram_schmidt
+
+end     # end module Numerical

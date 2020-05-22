@@ -1,3 +1,21 @@
+module Utils
+
+export @some, verba, @init_memoria, @memento, @get_memoria, @get_result, mid
+
+# TODO: here is just for a single assignment, 
+# need to be extended to handle general expressions
+macro some(arg)
+    if typeof(arg) === Expr
+        if arg.head === :(=)
+            quote
+                if $(arg.args[2]) !== nothing
+                    $(arg.args[1]) = $(arg.args[2])
+                end
+            end |> esc
+        end
+    end
+end
+
 # verbosity utility
 function verba(verbosity, level, message)
     if level ≤ verbosity
@@ -13,6 +31,9 @@ macro init_memoria(expr)
             memoria[meme] = []
         end
     end |> esc
+end
+macro nomino_memoria(nomen, expr)
+
 end
 macro memento(expr)
     if (typeof(expr) === Expr) && (expr.head === :(=))
@@ -45,3 +66,5 @@ function mid(a, b, c)
     a, b = a ≤ b ? (a, b) : (b, a)
     min(max(a, c), b)
 end
+
+end     # end module Utils

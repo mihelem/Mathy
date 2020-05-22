@@ -1,19 +1,13 @@
+module Optimization
+
 using LinearAlgebra
 import Plots
 
-# TODO: here is just for a single assignment, 
-# need to be extended to handle general expressions
-macro some(arg)
-    if typeof(arg) === Expr
-        if arg.head === :(=)
-            quote
-                if $(arg.args[2]) !== nothing
-                    $(arg.args[1]) = $(arg.args[2])
-                end
-            end |> esc
-        end
-    end
-end
+include("utils.jl")
+using .Utils
+
+export  OptimizationInstance, OptimizationProblem, OptimizationAlgorithm, OptimizationSolver, OptimizationSolverOptions,
+        OptimizationResult, plot!, plot
 
 abstract type OptimizationProblem end
 
@@ -96,6 +90,32 @@ function set!(instance::OptimizationInstance, meme::String, cur_plot::Plots.Plot
     instance
 end
 
+include("linesearch.jl")
+using .LineSearch
+export  bracket_minimum, fibonacci_search, fibonacci_as_power_search, golden_section_search, line_search
+
+include("descent.jl")
+using .Descent
+export  DescentMethod, init!, step!, GradientDescent, ConjugateGradientDescent, MomentumDescent, NesterovMomentumDescent,
+        AdagradDescent, RMSPropDescent, AdadeltaDescent, AdamDescent, HyperGradientDescent, HyperNesterovMomentumDescent,
+        NoisyDescent
+
+include("minquadratic.jl")
+using .MinQuadratic
+export set!, run!, QuadraticBoxPCGDescent, MQBProblem, MQBPSolverOptions, MQBPAlgorithmPG1, generate_quadratic_boxed_problem, get_test
+
+include("mincostflow.jl")
+using .MinCostFlow
+export  run!, set!, QMCFBProblem, get_test, get_reduced, get_graph_components, generate_quadratic_min_cost_flow_boxed_problem,
+        QMCFBPAlgorithmD3, QMCFBPAlgorithmD2, QMCFBPAlgorithmD1, QMCFBPAlgorithmPD1, QMCFBPSolverOptions, MinCostFlowProblem
+
+include("numerical.jl")
+using .Numerical
+export  bidiagonal_decomposition_handmade2, bidiagonal_decomposition_handmade, GMRES_naive, Arnoldi_naive,
+        Arnoldi_iterations, rayleigh_inverse_iteration, rayleigh_iteration, hessenberg_via_householder,
+        choleski_factorisation, gaussian_elimination_row_pivot, gaussian_elimination, hessenberg_gram_schmidt,
+        QR_gram_schmidt
+
 
 # ♂ TO BE ERASED (EXPERIMENTS)
 # Experiments in optimization
@@ -135,3 +155,14 @@ function active_set_method_quadratic(Q, q, A, b, x, ϵ)
         end
     end
 end
+
+end # end module Optimization
+
+# examples
+# using Revise
+# includet("optimization.jl")
+# using .Optimization
+# algorithm = MQBPAlgorithmPG1(descent=QuadraticBoxPCGDescent(), verbosity=1, max_iter=1000, ε=1e-7, ϵ₀=1e-8)
+# test = get_test(algorithm, n=10)
+# test.solver.options.memoranda = Set(["normΠ∇f"])
+# include("optimization.jl"); using .Optimization; algorithm = MQBPAlgorithmPG1(descent=QuadraticBoxPCGDescent(), verbosity=1, max_iter=1000, ε=1e-7, ϵ₀=1e-8); test = get_test(algorithm, n=10); test.solver.options.memoranda = Set(["normΠ∇f"])

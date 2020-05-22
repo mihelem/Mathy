@@ -1,14 +1,16 @@
+module MinCostFlow
+
 using LinearAlgebra
 using SparseArrays
 using Parameters
 
-include("utils.jl")
+using ..Optimization
+using ..Optimization.Utils
+import ..Optimization.run!
+import ..Optimization.set!
+import ..Optimization.MinQuadratic.get_test  # Necessary since we extend here the multiple dispatch
 
 # ----------------------------------------------------------------------- #
-
-include("optimization.jl")
-include("descent.jl")
-include("numerical.jl")
 
 abstract type MinCostFlowProblem <: OptimizationProblem end
 # ------------ (Convex) Quadratic Min Cost Flow Boxed Problem ----------- #
@@ -911,8 +913,11 @@ function get_reduced(𝔓::QMCFBProblem)
             true) for (p_row, p_col) in zip(eachcol(P_row), eachrow(P_col))]
 end
 
+export  run!, set!, QMCFBProblem, get_test, get_reduced, get_graph_components, generate_quadratic_min_cost_flow_boxed_problem,
+        QMCFBPAlgorithmD3, QMCFBPAlgorithmD2, QMCFBPAlgorithmD1, QMCFBPAlgorithmPD1, QMCFBPSolverOptions, MinCostFlowProblem
+end     # end of module MinCostFlow
+
 # Example
-# include("mincostflow.jl")
 # algorithm = QMCFBPAlgorithmD1(descent=GradientDescent(), verbosity=0, max_iter=20, ϵₘ=1e-10, ε=1e-5, cure_singularity=false); test = get_test(algorithm, m=5, n=8, singular=0); run!(test)
 # θ = test.result.memoria["θ"]
 # do_plot = i -> Plots.plot([j for j in 1:length(θ[i])], θ[i])
