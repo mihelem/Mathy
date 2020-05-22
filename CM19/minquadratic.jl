@@ -108,9 +108,9 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
     ΠᶜT = (d, x, l, u) -> begin                             # \Pi \^c T
         𝔲, dec = (u .⪝ x), (d .> 0.0)
         𝔩, inc = (x .⪝ l), (d .< 0.0)
-        (𝔲 .& dec) .| (𝔩 .& inc)
+        ((𝔲 .& dec) .| (𝔩 .& inc))
     end
-    ΠT = (d, x, l, u) -> .~ΠᶜT(d, x, l, u)
+    ΠT = (d, x, l, u) -> (.~ΠᶜT(d, x, l, u))
     ΠT! = (d, x, l, u) -> begin
         d[ΠᶜT(d, x, l, u)] .= 0.0
         d
@@ -145,6 +145,7 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
         Δα = [sum(Δ1), sum(dQ*d)]
 
         x′ = copy(x)
+        count = 0
         while length(pq) > 0
             if Δα[1] ≥ 0.0
                 break
@@ -162,6 +163,7 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
                     Δ -> (Δ1[𝔐] += Δ; Δα[1] += sum(Δ) - Δ1[i])
                 x′[i] += Δx[i]
             end
+            count += 1
         end
 
         return (x′, 𝔐)
@@ -172,12 +174,15 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
         g′, g = Q*x+q, zeros(eltype(x), length(x)) .+ Inf
         d = -g′
         for i in 1:max_iter
-            𝔐 = (ΠT(d, x, l, u) .& .~((d / norm(d, Inf)) .≃ 0.0))
+            𝔐 = (ΠT(d, x′, l, u) .& .~((d / norm(d, Inf)) .≃ 0.0))
+
             norm_Πg′ = norm(g[𝔐], Inf)
+            @memento local_normΠ∇f = norm_Πg′
+            verba(2, "local_search : norm_Πg′ = $(norm_Πg′)")
             if norm_Πg′ < ε || count(𝔐) == 0
                 break
             end
-            
+
             ᾱ = minimum(get_Δx′(x′[𝔐], d[𝔐], l[𝔐], u[𝔐]) ./ d[𝔐])
             Δα = (d[𝔐]'q[𝔐] + d[𝔐]'Q[𝔐, :]*x′, d'Q*d)
             α = - Δα[1] / Δα[2]
@@ -209,7 +214,14 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
 
         x′, 𝔐′ = line_search′(pq, x′, Δx′, d′, Q′, q′, Q[𝔐, :]*x)
         x[𝔐] = x′
-        x[𝔐][𝔐′] = local_search′(x′[𝔐′], Q′[𝔐′, 𝔐′], q′[𝔐′] + Q′[𝔐′, .~𝔐′]*x′[.~𝔐′], l′[𝔐′], u′[𝔐′], 50)
+        if any(𝔐′)
+            𝔐′ = begin
+                temp = copy(𝔐)
+                temp[𝔐][.~𝔐′] .= false
+                temp
+            end
+            x[𝔐′] = local_search′(x[𝔐′], Q[𝔐′, 𝔐′], q[𝔐′] + Q[𝔐′, .~𝔐′]*x[.~𝔐′], l[𝔐′], u[𝔐′], 100, false)
+        end
         return x
     end
 
@@ -222,7 +234,8 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
         @memento Π∇f = -ΠT!(-g, x, l, u)
         @memento normΠ∇f = norm(Π∇f, Inf)        
         verba(1, "||Π∇f|| : $normΠ∇f")
-        @memento d = -g        
+        @memento d = -g       
+        @memento Πd = ΠT 
         for i in 1:max_iter
             if normΠ∇f < ε
                 verba(0, "\nIterations: $i\n")
@@ -238,7 +251,7 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
                 @memento Π∇f[:] = -ΠT!(-g′, x, l, u)
                 # g[:] = -ΠT!(-g, x, l, u)
                 @memento β = g′⋅(g′-g) / g⋅g
-                β = max(0. , isnan(β) ? 0.0 : β)
+                β = max(0.0 , isnan(β) ? 0.0 : β)
                 @memento d[:] = -g′ + β*d
                 g[:] = g′
             end
@@ -256,6 +269,9 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
     end
 
     solve(descent, x, Q, q, l, u)
+    # x = local_search′(x, Q, q, l, u, max_iter, false)
+    # result = @get_result x
+    # OptimizationResult{MQBProblem}(memoria=@get_memoria, result=result)
 end
 
 # -------------- Quadratic Boxed Problem Generator -------------- #
