@@ -295,7 +295,6 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
                 @memento x[:] = get_Πx(step′(x, d, Q, q, l, u), l, u)
                 g′ = get_∇f(x, Q, q)
                 @memento Π∇f[:] = -ΠT!(-g′, x, l, u)
-                # g[:] = -ΠT!(-g, x, l, u)
                 @memento β = g′⋅(g′-g) / g⋅g
                 β = max(0.0 , isnan(β) ? 0.0 : β)
                 @memento d[:] = -g′ + β*d
