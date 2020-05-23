@@ -1,3 +1,18 @@
+"""
+    MinCostFlow submodule of Optimization
+
+
+**Examples**
+
+__Quadratic MinCostFlow Boxed__
+``julia
+algorithm = QMCFBPAlgorithmD1(descent=GradientDescent(), verbosity=0, max_iter=20, ϵₘ=1e-10, ε=1e-5, cure_singularity=false)
+test = get_test(algorithm, m=5, n=8, singular=0) 
+run!(test)
+θ = test.result.memoria["θ"]    # fictitious θ
+do_plot = i -> Plots.plot([j for j in 1:length(θ[i])], θ[i])
+``
+"""
 module MinCostFlow
 
 using LinearAlgebra
@@ -10,15 +25,22 @@ import ..Optimization.run!                  # Necessary since we extend here the
 import ..Optimization.set!                  # idem ^
 import ..Optimization.MinQuadratic.get_test # idem ^
 
-# ----------------------------------------------------------------------- #
 
+"""
+    MinCostFlowProblem
+Algorithms deployed in this submodule describes solutions for subproblems of the kind MinCostFlow
+"""
 abstract type MinCostFlowProblem <: OptimizationProblem end
-# ------------ (Convex) Quadratic Min Cost Flow Boxed Problem ----------- #
-# minₓ { ½xᵀQx + qᵀx  with  x s.t.  Ex = b  &  l ≤ x ≤ u }
-# Q ∈ { diag ≥ 0 }
-# E node-arc incidence matrix of directed graph
-# m : number of nodes
-# n : number of arcs
+
+"""
+    QMCFBProblem <: MinCostFlowProblem
+## (Convex) Quadratic Min Cost Flow Boxed Problem
+`minₓ { ½xᵀQx + qᵀx  with  x s.t.  Ex = b  &  l ≤ x ≤ u }`
+with 
+* `Q ∈ { diag ≥ 0 }`
+* `E` : node-arc incidence matrix of directed graph, `rank ≡ nodes - connected components` if unreduced
+* `reduced` : boolean indicating if the problem has been reduced, in which case E is full rank and represent the incidence matrix of a connected graph minus 1 vertex
+"""
 struct QMCFBProblem <: MinCostFlowProblem
     Q
     q
@@ -38,6 +60,9 @@ mutable struct QMCFBPSolverOptions <: OptimizationSolverOptions{QMCFBProblem}
 end
 
 # ----------------------------- Solver runner --------------------------- #
+"""
+    run!(solver::OptimizationSolver{QMCFBProblem}, problem::QMCFBProblem)
+"""
 function run!(solver::OptimizationSolver{QMCFBProblem}, problem::QMCFBProblem)
     run!(solver.algorithm, problem, memoranda=solver.options.memoranda)
 end
@@ -143,9 +168,14 @@ function run!(algorithm::QMCFBPAlgorithmPD1, 𝔓::QMCFBProblem; memoranda=Set([
     OptimizationResult{QMCFBProblem}(memoria=@get_memoria, result=result)
 end
 
-# TODO: other line searches and descent methods
-# ---------------------------- Dual algorithm ----------------------------- #
-# Equality Constraints dualised
+"""
+## Dual algorithm
+Equality Constraints dualised
+
+**TODO**
+
+Other line searches and descent methods
+"""
 mutable struct QMCFBPAlgorithmD1 <: OptimizationAlgorithm{QMCFBProblem}
     descent::DescentMethod
     verba               # verbosity utility
@@ -486,11 +516,14 @@ function run!(algorithm::QMCFBPAlgorithmD1, 𝔓::QMCFBProblem; memoranda=Set([]
         (result -> OptimizationResult{QMCFBProblem}(memoria=@get_memoria, result=result))
 end
 
-# WIP 
-# TODO: adapt to new framework
-# TODO: implement REAL projected gradient (the present one is not a real projection...)
-# ---------------------------- Dual algorithm D2 ----------------------------- #
+"""
+# ---------------------------- Dual algorithm D2 -----------------------------
 # Equality and Box Constraints dualised
+WIP 
+## TODO
+* adapt to new framework
+* implement REAL projected gradient (the present one is not a real projection...)
+"""
 mutable struct QMCFBPAlgorithmD2 <: OptimizationAlgorithm{QMCFBProblem}
     descent::DescentMethod
     verba               # verbosity utility
@@ -644,7 +677,8 @@ function run!(algorithm::QMCFBPAlgorithmD2, 𝔓::QMCFBProblem)
         # here I'm taking the inward normal since we have feasibility for C .≥ 0
         # (we shouldn't move along this normal)
         ∇C = -[[E₀; (I(n))[:, .~ℭ]; spzeros(eltype(Q), n₁, n-n₁)]  [spzeros(eltype(Q), m, n+n₁); I(n+n₁)]]
-
+        
+        # TODO: Projection to be implemented
         function project!(M, v)
             if size(M, 2) > 0
                 for c in eachcol(M)
@@ -705,9 +739,11 @@ function run!(algorithm::QMCFBPAlgorithmD2, 𝔓::QMCFBProblem)
     return solve_by_proj_conj_grad()
 end
 
-# WIP: really, just copy pasted from old commit!
-# ---------------------------- Dual algorithm D3 ----------------------------- #
+"""
+# ---------------------------- Dual algorithm D3 -----------------------------
 # Null Space method + Box Constraints dualised
+WIP: really, just copy pasted from old commit!
+"""
 mutable struct QMCFBPAlgorithmD3 <: OptimizationAlgorithm{QMCFBProblem}
 end
 function set!(algorithm::QMCFBPAlgorithmD3, 𝔓::QMCFBProblem)
@@ -786,8 +822,11 @@ function run!(algo::QMCFBPAlgorithmD3, 𝔓::QMCFBProblem)
     return test()
 end
 
-# -------------- Quadratic Min Cost Flow Boxed Problem Generator ---------- #
-# TODO: Add custom active constraints %
+"""
+# -------------- Quadratic Min Cost Flow Boxed Problem Generator ----------
+## TODO
+* Add custom active constraints
+"""
 function generate_quadratic_min_cost_flow_boxed_problem(type, m, n; singular=0)
     Q = spdiagm(0 => [sort(rand(type, n-singular), rev=true); zeros(type, singular)])
     q = rand(eltype(Q), n)
@@ -809,7 +848,9 @@ function noNaN(V)
     return (x -> isnan(x) ? 0. : x).(V)
 end
 
-# ----------- Quadratic Min Cost Flow Boxed Problem - Algorithm Tester ------------- #
+"""
+# ----------- Quadratic Min Cost Flow Boxed Problem - Algorithm Tester -------------
+"""
 function get_test(algorithm::OptimizationAlgorithm{QMCFBProblem};
     m::Integer, n::Integer,
     singular::Integer=0,
@@ -834,7 +875,12 @@ function get_test(algorithm::OptimizationAlgorithm{QMCFBProblem};
 end
 
 # --------------------------- Incidence Matrix Utils --------------------- #
-# Connected components matrix-wise
+"""
+    get_graph_components(E)
+Connected components matrix-wise
+**Arguments**
+* `E` : node-arc incidence matrix
+"""
 function get_graph_components(E)
     # m : number of nodes
     # n : number of arcs
@@ -899,6 +945,17 @@ function get_graph_components(E)
     return (P, P_C)
 end
 
+"""
+    get_reduced(𝔓::QMCFBProblem)
+Return the MinCostFlow problem corresponding to the first of the connected components in which the MinCostFlow problem can be separated
+
+**Arguments**
+* `𝔓::QMCFBProblem` : Quadratic MinCostFlow Boxed Problem whose node-arc incidence matrix may represent a disconnected digraph
+
+**Note**
+
+After reduction, the new incidence matrix `𝔓.E` will have dimension of the left kernel equal to 1 ≡> (1,1,...,1)
+"""
 function get_reduced(𝔓::QMCFBProblem)
     @unpack Q, q, l, u, E, b = 𝔓
     P_row, P_col = get_graph_components(E)
@@ -916,8 +973,3 @@ end
 export  run!, set!, QMCFBProblem, get_test, get_reduced, get_graph_components, generate_quadratic_min_cost_flow_boxed_problem,
         QMCFBPAlgorithmD3, QMCFBPAlgorithmD2, QMCFBPAlgorithmD1, QMCFBPAlgorithmPD1, QMCFBPSolverOptions, MinCostFlowProblem
 end     # end of module MinCostFlow
-
-# Example
-# algorithm = QMCFBPAlgorithmD1(descent=GradientDescent(), verbosity=0, max_iter=20, ϵₘ=1e-10, ε=1e-5, cure_singularity=false); test = get_test(algorithm, m=5, n=8, singular=0); run!(test)
-# θ = test.result.memoria["θ"]
-# do_plot = i -> Plots.plot([j for j in 1:length(θ[i])], θ[i])

@@ -1,3 +1,53 @@
+"""
+Main module of the package
+
+## Types and Structs
+`OptimizationProblem` is the **abstract type** whose subtypes, say `Problem`, parametrize all the other main types and structures.
+
+### Examples:
+**Testing MinQuadratic**
+```julia
+using Optimization
+# build an OptimizationAlgorithm{MQBProblem}, where MQBProblem is the optimization problem
+# min_x ½x'Qx+qx     with box constraints    l .<= x .<= u     and    Q >= 0
+algorithm = 
+	MQBPAlgorithmPG1(
+		descent=QuadraticBoxPCGDescent(), 
+		verbosity=1, 
+		max_iter=1000, 
+		ε=1e-7, 
+		ϵ₀=1e-12)
+# generate an OptimizationInstance{MQBProblem} using the specified algorithm, with Q in the problem of size 200x200 
+test = get_test(algorithm, n=200) 
+# set a specific variable to be tracked during the execution of the algorithm
+# the set of variables which CAN be tracked ought to be specified (by the developer of the algorithm) in algorithm.memorabilia
+test.solver.options.memoranda = Set(["normΠ∇f"])
+# run the instance, so run the solver with the specified algorithm on the specified problem; the result is saved in `test`
+run!(test)	
+```
+
+---
+
+`OptimizationInstance{Problem}` contains a 
+* `problem::Problem` : the problem
+* `solver::OptimizationSolver{>: Problem}` : a solver which solves supertypes of the problem
+* `result::OptimizationResult{Problem}` : the result of the solver applied to the problem
+
+---
+
+`OptimizationSolver{Problem} contains an
+* `algorithm::OptimizationAlgorithm{>: Problem}` : an algorithm which can handle supertypes of the problem
+* `options::OptimizationSolverOptions{>: Problem}` : specific options for the solver, e.g. which keys to save in `memoria`
+
+---
+
+`OptimizationResult{Problem}` is up to now independent from the parameter, which is used just to know which problem the result is concerned with;
+contains:
+* `result::Dict{String, Any}` : results, saved in a dictionary; usually generated with the macro `@get_result` in utils.jl
+* `memoria::Dict{String, Any}` : with *memoria* macros in utils.jl, to save the intermediate results of the computation, e.g. for plots
+* `plots::Dict{String, Plots.plot}` : saving here the plots generated from intermediate data
+
+"""
 module Optimization
 
 using LinearAlgebra
@@ -20,6 +70,17 @@ mutable struct OptimizationSolver{Problem <: OptimizationProblem}
 
     OptimizationSolver{Problem}() where {Problem <: OptimizationProblem} = new() 
 end
+"""
+```julia
+set!(solver; algorithm = nothing, options = nothing)
+```
+
+**Arguments**
+* `solver :: OptimizationSolver{P}`
+* `algorithm :: Union{Nothing, OptimizationAlgorithm{>: P}}`
+* `options :: Union{Nothing, OptimizationSolverOptions{>: P}}`
+
+"""
 function set!(solver::OptimizationSolver{P}; 
     algorithm::Union{Nothing, OptimizationAlgorithm{>: P}} = nothing, 
     options::Union{Nothing, OptimizationSolverOptions{>: P}} = nothing) where {P <: OptimizationProblem}
@@ -29,8 +90,6 @@ function set!(solver::OptimizationSolver{P};
 end
 
 # ------------------------ Result of Computation ------------------------ #
-# if in need for specific results, substitute with
-# abstract type OptimizationResult{Problem <: OptimizationProblem}
 mutable struct OptimizationResult{Problem <: OptimizationProblem} 
     result::Dict{String, Any}
     memoria::Dict{String, Any}
@@ -44,6 +103,18 @@ mutable struct OptimizationResult{Problem <: OptimizationProblem}
         object
     end
 end
+"""
+```julia
+plot!(cur_plot, result, meme)
+```
+
+Add to the plot `cur_plot` the intermediate data with key `meme` saved in `result.memoria`
+Arguments:
+* `cur_plot :: Plots.Plot`
+* `result :: OptimizationResult`
+* `meme :: String`
+
+"""
 function plot!(cur_plot::Plots.Plot, result::OptimizationResult, meme::String)
     if haskey(result.memoria, meme) === false
         return
@@ -51,6 +122,19 @@ function plot!(cur_plot::Plots.Plot, result::OptimizationResult, meme::String)
     result.memoria[meme] |> (
         data -> Plots.plot!(cur_plot, 1:size(data, 1), data))
 end
+
+"""
+```julia
+plot(result, meme)
+```
+
+Plot the intermediate data with key `meme` as retrieved from `result.memoria`
+
+**Arguments:**
+* `result :: OptimizationResult`
+* `meme :: String`
+
+"""
 function plot(result::OptimizationResult, meme::String)
     if haskey(result.memoria, meme) === false
         return
@@ -58,6 +142,20 @@ function plot(result::OptimizationResult, meme::String)
     result.memoria[meme] |> (
         data -> Plots.plot(1:size(data, 1), data))
 end
+
+"""
+```julia
+set!(result, meme, cur_plot)
+```
+
+Save the plot `cur_plot` in the dictionary `result.plots` with the key `meme`
+
+**Arguments**
+* `result :: OptimizationResult`
+* `meme :: String`
+* `cur_plot :: Plots.Plot`
+
+"""
 function set!(result::OptimizationResult, meme::String, cur_plot::Plots.Plot)
     result.plots[meme] = cur_plot
     result
@@ -70,6 +168,20 @@ mutable struct OptimizationInstance{Problem <: OptimizationProblem}
 
     OptimizationInstance{Problem}() where {Problem <: OptimizationProblem} = new()
 end
+"""
+```julia
+set!(instance; problem = nothing, solver = nothing, result = nothing, algorithm = nothing, options = nothing)
+```
+
+**Arguments**
+* `instance :: OptimizationInstance{P}`
+* `problem :: Union{Nothing, P}`
+* `solver :: Union{Nothing, OptimizationSolver{>: P}}`
+* `result :: Union{Nothing, OptimizationResult{P}}`
+* `algorithm :: Union{Nothing, OptimizationAlgorithm{>: P}}`
+* `options :: Union{Nothing, OptimizationSolverOptions{>: P}}`
+
+"""
 function set!(instance::OptimizationInstance{P};
     problem::Union{Nothing, P} = nothing,
     solver::Union{Nothing, OptimizationSolver{>: P}} = nothing,
@@ -82,9 +194,32 @@ function set!(instance::OptimizationInstance{P};
     @some instance.result = result
     set!(instance.solver, algorithm=algorithm, options=options)
 end
+"""
+```julia
+run!(instance)
+```
+
+**Arguments**
+* `instance :: OptimizationInstance`
+
+"""
 function run!(instance::OptimizationInstance)
     set!(instance, result=run!(instance.solver, instance.problem))
 end
+
+"""
+```julia
+set!(instance, meme, cur_plot)
+```
+
+Save the plot `cur_plot` in the dictionary `instance.result.plots` with the key `meme`
+
+**Arguments**
+* `instance::OptimizationInstance`
+* `meme::String`
+* `cur_plot::Plots.Plot`
+
+"""
 function set!(instance::OptimizationInstance, meme::String, cur_plot::Plots.Plot)
     set!(instance.result, meme, cur_plot)
     instance
@@ -117,13 +252,15 @@ export  bidiagonal_decomposition_handmade2, bidiagonal_decomposition_handmade, G
         QR_gram_schmidt
 
 
-# ♂ TO BE ERASED (EXPERIMENTS)
-# Experiments in optimization
+"""
+### ♂ TO BE ERASED (EXPERIMENTS)
+Experiments in optimization
 
-# Naive Implementation
-# Assumptions:
-#  Everything invertible, Q positive definite
+Naive Implementation
 
+**Assumptions**:
+Everything invertible, Q positive definite
+"""
 function solve_reduced_KKT(Q, q, A, b, x, ϵ)
     Q˜ = inv(Q)
     M = A*Q˜*A'
@@ -132,7 +269,6 @@ function solve_reduced_KKT(Q, q, A, b, x, ϵ)
 
     return (x̅, μ̅)
 end
-
 function active_set_method_quadratic(Q, q, A, b, x, ϵ)
     B = zeros(Bool, size(A, 1))
     while true

@@ -1,3 +1,7 @@
+"""
+Code Snippets built upon Algorithms for Optimization, by Wheeler & Kochenderfer, ©2019 MIT Press
+"""
+
 module Descent
 
 using LinearAlgebra
