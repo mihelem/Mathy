@@ -120,7 +120,8 @@ function run!(
         init!(subgradient, _->-L, _->-∂L, μ)
         for i in 1:max_iter
             # TODO: develop stopping criteria
-            @memento μ[:] = step!(subgradient, _->-L, _->-∂L, μ)
+            step!(subgradient, _->-L, _->-∂L, μ) |>
+                (μ′, α, sg) -> @memento μ[:] = μ′
             @memento x[:] = get_an_x(μ)
             @memento L = get_L(x, μ)
             @memento ∂L[:] = get_∂L(x)
