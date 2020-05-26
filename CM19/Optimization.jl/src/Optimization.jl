@@ -10,25 +10,25 @@ Main module of the package
 using Optimization
 # build an OptimizationAlgorithm{MQBProblem}, where MQBProblem is the optimization problem
 # min_x ½x'Qx+qx     with box constraints    l .<= x .<= u     and    Q >= 0
-algorithm = 
+algorithm =
 	MQBPAlgorithmPG1(
-		descent=QuadraticBoxPCGDescent(), 
-		verbosity=1, 
-		max_iter=1000, 
-		ε=1e-7, 
+		descent=QuadraticBoxPCGDescent(),
+		verbosity=1,
+		max_iter=1000,
+		ε=1e-7,
 		ϵ₀=1e-12)
-# generate an OptimizationInstance{MQBProblem} using the specified algorithm, with Q in the problem of size 200x200 
-test = get_test(algorithm, n=200) 
+# generate an OptimizationInstance{MQBProblem} using the specified algorithm, with Q in the problem of size 200x200
+test = get_test(algorithm, n=200)
 # set a specific variable to be tracked during the execution of the algorithm
 # the set of variables which CAN be tracked ought to be specified (by the developer of the algorithm) in algorithm.memorabilia
 test.solver.options.memoranda = Set(["normΠ∇f"])
 # run the instance, so run the solver with the specified algorithm on the specified problem; the result is saved in `test`
-run!(test)	
+run!(test)
 ```
 
 ---
 
-`OptimizationInstance{Problem}` contains a 
+`OptimizationInstance{Problem}` contains a
 * `problem::Problem` : the problem
 * `solver::OptimizationSolver{>: Problem}` : a solver which solves supertypes of the problem
 * `result::OptimizationResult{Problem}` : the result of the solver applied to the problem
@@ -56,8 +56,14 @@ import Plots
 include("utils.jl")
 using .Utils
 
-export  OptimizationInstance, OptimizationProblem, OptimizationAlgorithm, OptimizationSolver, OptimizationSolverOptions,
-        OptimizationResult, plot!, plot
+export  OptimizationInstance,
+        OptimizationProblem,
+        OptimizationAlgorithm,
+        OptimizationSolver,
+        OptimizationSolverOptions,
+        OptimizationResult,
+        plot!,
+        plot
 
 abstract type OptimizationProblem end
 
@@ -68,7 +74,7 @@ mutable struct OptimizationSolver{Problem <: OptimizationProblem}
     algorithm::OptimizationAlgorithm{>: Problem}
     options::OptimizationSolverOptions{>: Problem}
 
-    OptimizationSolver{Problem}() where {Problem <: OptimizationProblem} = new() 
+    OptimizationSolver{Problem}() where {Problem <: OptimizationProblem} = new()
 end
 """
 ```julia
@@ -81,16 +87,16 @@ set!(solver; algorithm = nothing, options = nothing)
 * `options :: Union{Nothing, OptimizationSolverOptions{>: P}}`
 
 """
-function set!(solver::OptimizationSolver{P}; 
-    algorithm::Union{Nothing, OptimizationAlgorithm{>: P}} = nothing, 
+function set!(solver::OptimizationSolver{P};
+    algorithm::Union{Nothing, OptimizationAlgorithm{>: P}} = nothing,
     options::Union{Nothing, OptimizationSolverOptions{>: P}} = nothing) where {P <: OptimizationProblem}
-    
+
     @some solver.algorithm = algorithm
     @some solver.options = options
 end
 
 # ------------------------ Result of Computation ------------------------ #
-mutable struct OptimizationResult{Problem <: OptimizationProblem} 
+mutable struct OptimizationResult{Problem <: OptimizationProblem}
     result::Dict{String, Any}
     memoria::Dict{String, Any}
     plots::Dict{String, Plots.plot}
@@ -186,9 +192,9 @@ function set!(instance::OptimizationInstance{P};
     problem::Union{Nothing, P} = nothing,
     solver::Union{Nothing, OptimizationSolver{>: P}} = nothing,
     result::Union{Nothing, OptimizationResult{P}} = nothing,
-    algorithm::Union{Nothing, OptimizationAlgorithm{>: P}} = nothing, 
+    algorithm::Union{Nothing, OptimizationAlgorithm{>: P}} = nothing,
     options::Union{Nothing, OptimizationSolverOptions{>: P}} = nothing) where {P <: OptimizationProblem}
-    
+
     @some instance.problem = problem
     @some instance.solver = solver
     @some instance.result = result
@@ -227,28 +233,78 @@ end
 
 include("linesearch.jl")
 using .LineSearch
-export  bracket_minimum, fibonacci_search, fibonacci_as_power_search, golden_section_search, line_search
+export  bracket_minimum,
+        fibonacci_search,
+        fibonacci_as_power_search,
+        golden_section_search,
+        line_search
 
 include("descent.jl")
 using .Descent
-export  DescentMethod, init!, step!, GradientDescent, ConjugateGradientDescent, MomentumDescent, NesterovMomentumDescent,
-        AdagradDescent, RMSPropDescent, AdadeltaDescent, AdamDescent, HyperGradientDescent, HyperNesterovMomentumDescent,
+export  DescentMethod,
+        init!,
+        step!,
+        GradientDescent,
+        ConjugateGradientDescent,
+        MomentumDescent,
+        NesterovMomentumDescent,
+        AdagradDescent,
+        RMSPropDescent,
+        AdadeltaDescent,
+        AdamDescent,
+        HyperGradientDescent,
+        HyperNesterovMomentumDescent,
         NoisyDescent
+
+include("subgradient.jl")
+using .Subgradient
+export  Subgradient,
+        SubgradientMethod,
+        init!,
+        step!
 
 include("minquadratic.jl")
 using .MinQuadratic
-export set!, run!, QuadraticBoxPCGDescent, MQBProblem, MQBPSolverOptions, MQBPAlgorithmPG1, generate_quadratic_boxed_problem, get_test
+export  set!,
+        run!,
+        QuadraticBoxPCGDescent,
+        MQBProblem,
+        MQBPSolverOptions,
+        MQBPAlgorithmPG1,
+        generate_quadratic_boxed_problem,
+        get_test
 
 include("mincostflow.jl")
 using .MinCostFlow
-export  run!, set!, QMCFBProblem, get_test, get_reduced, get_graph_components, generate_quadratic_min_cost_flow_boxed_problem,
-        QMCFBPAlgorithmD3, QMCFBPAlgorithmD2, QMCFBPAlgorithmD1, QMCFBPAlgorithmPD1, QMCFBPSolverOptions, MinCostFlowProblem
+export  run!,
+        set!,
+        QMCFBProblem,
+        get_test,
+        get_reduced,
+        get_graph_components,
+        generate_quadratic_min_cost_flow_boxed_problem,
+        QMCFBPAlgorithmD3D,
+        QMCFBPAlgorithmD2D,
+        QMCFBPAlgorithmD1D,
+        QMCFBPAlgorithmD1SG,
+        QMCFBPAlgorithmPD1D,
+        QMCFBPSolverOptions,
+        MinCostFlowProblem
 
 include("numerical.jl")
 using .Numerical
-export  bidiagonal_decomposition_handmade2, bidiagonal_decomposition_handmade, GMRES_naive, Arnoldi_naive,
-        Arnoldi_iterations, rayleigh_inverse_iteration, rayleigh_iteration, hessenberg_via_householder,
-        choleski_factorisation, gaussian_elimination_row_pivot, gaussian_elimination, hessenberg_gram_schmidt,
+export  bidiagonal_decomposition_handmade2,
+        bidiagonal_decomposition_handmade,
+        GMRES_naive,
+        Arnoldi_naive,
+        Arnoldi_iterations,
+        rayleigh_inverse_iteration,
+        rayleigh_iteration,
+        hessenberg_via_householder,
+        choleski_factorisation,
+        gaussian_elimination_row_pivot,
+        gaussian_elimination,
+        hessenberg_gram_schmidt,
         QR_gram_schmidt
 
 

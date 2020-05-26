@@ -376,8 +376,8 @@ function bidiagonal_decomposition_handmade2(A, x₀, ϵᵤ = 0.)
     return (U, V, J) #, 𝔲, 𝔳)
 end
 
-function test_bi(m, n, d=1., ϵ=1e-6)
-    A = Float64.(rand(1:m*n, m, n))
+function test_bi(m, n, d=1., ϵ=1e-6; A′=nothing)
+    A = A′ === nothing ? Float64.(rand(1:m*n, m, n)) : A′
     x = [1.; zeros(n-1)]
     
     function test(f)

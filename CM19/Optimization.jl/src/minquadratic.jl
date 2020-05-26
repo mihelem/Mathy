@@ -197,7 +197,7 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
                 break
             end
 
-            α = - Δα[1] / Δα[2]
+            α = - Δα[1] / max(Δα[2], +0.0)
             i, ᾱ = peek(pq); dequeue!(pq)
             if α ≤ ᾱ
                 x′[𝔐] += α*d[𝔐]
