@@ -92,9 +92,15 @@ include("algorithm/QMCFBP_D3_D.jl")
 ## TODO
 * Add custom active constraints
 """
-function generate_quadratic_min_cost_flow_boxed_problem(type, m, n; singular=0)
-    Q = spdiagm(0 => [sort(rand(type, n-singular), rev=true); zeros(type, singular)])
-    q = rand(eltype(Q), n)
+function generate_quadratic_min_cost_flow_boxed_problem(
+    type,
+    m,
+    n;
+    singular=0,
+    active=0)
+
+    Q = spdiagm(
+        0 => [sort(rand(type, n-singular), rev=true); zeros(type, singular)])
     E = spzeros(Int8, m, n)
     for i=1:n
         u, v = (rand(1:m), rand(1:m-1))
@@ -105,6 +111,24 @@ function generate_quadratic_min_cost_flow_boxed_problem(type, m, n; singular=0)
     x = rand(eltype(Q), n)
     l = -10*rand(eltype(Q), n)+x
     u = 10*rand(eltype(Q), n)+x
+    Qu, Ql = Q*u, Q*l
+
+    # prepare q such that the optimal point of the free    ½xᵀQx+qᵀx
+    # has minimum outside of active side
+    P = [1:n;]
+    lu = CartesianIndex{2}[]
+    for i in 1:active
+        k = rand(1:2)
+        j = rand(i:n)
+        P[j], P[i] = P[i], P[j]
+        push!(lu, CartesianIndex{2}(P[i], k))
+    end
+    𝔭 = zeros(Bool, n, 2)
+    𝔭[lu] .= true
+    q = rand(n) |>
+        r -> -Qu + (Qu-Ql).*(𝔭[:, 1] + r.*(1 .- (𝔭[:, 2] - 𝔭[:, 1]))) + r.*(𝔭[:,1]-𝔭[:,2])
+
+    # choose b such that there is an x :  l ≤ x ≤ u  ∩  Ex-b = 0
     b = E*x
     return QMCFBProblem(Q, q, l, u, E, b, false)
 end
@@ -119,9 +143,10 @@ end
 function get_test(algorithm::OptimizationAlgorithm{QMCFBProblem};
     m::Integer, n::Integer,
     singular::Integer=0,
+    active::Integer=0,
     𝔓::Union{Nothing, QMCFBProblem}=nothing,
     should_reduce::Bool=false,
-    type::DataType=Float64)
+    type::DataType=Float64,)
 
     if 𝔓 === nothing
         𝔓 = generate_quadratic_min_cost_flow_boxed_problem(type, m, n, singular=singular)

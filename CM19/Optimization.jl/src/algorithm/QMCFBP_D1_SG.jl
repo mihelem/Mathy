@@ -85,8 +85,10 @@ function run!(
     function get_an_xᵢ(Qx̃ᵢ, 𝔅ᵢ, Q̂╲ᵢ, lᵢ, uᵢ)
         if 𝔅ᵢ[2]
             Q̂╲ᵢ*Qx̃ᵢ
-        else
+        elseif 𝔅ᵢ[1] != 𝔅ᵢ[3]
             (lᵢ*𝔅ᵢ[1] + uᵢ*𝔅ᵢ[3]) / (𝔅ᵢ[1] + 𝔅ᵢ[3])
+        else
+            rand() |> r -> r*lᵢ + (1.0-r)*uᵢ
         end
     end
     function get_an_x(Qx̃, 𝔅, Q̂╲=Q̂╲, l=l, u=u)
@@ -134,6 +136,7 @@ function run!(
                 @memento norm∂L′=norm∂L
                 @memento x′[:]=x
                 @memento μ′[:]=μ
+                @memento i′=i
             end
         end
         return @get_result x′ μ′ L′ ∂L′

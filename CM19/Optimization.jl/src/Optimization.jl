@@ -124,7 +124,8 @@ Arguments:
 function plot!(
         cur_plot::Plots.Plot,
         result::OptimizationResult,
-        meme::String;
+        meme::String,
+        meme_iter::Union{String, Nothing}=nothing;
         mapping=x->x)
 
     if haskey(result.memoria, meme) === false
@@ -132,7 +133,15 @@ function plot!(
     end
     result.memoria[meme] |>
     data -> mapping(data) |>
-    data′ -> Plots.plot!(cur_plot, 1:size(data′, 1), data′)
+    data′ -> begin
+        if (meme_iter !== nothing) && (haskey(result.memoria, meme_iter) == true)
+            data_iter = result.memoria[meme_iter]
+            len = min(length(data_iter), length(data′))
+            Plots.plot!(cur_plot, data_iter[1:len], data′[1:len])
+        else
+            Plots.plot!(cur_plot, 1:length(data′), data′)
+        end
+    end
 end
 
 """
@@ -149,7 +158,8 @@ Plot the intermediate data with key `meme` as retrieved from `result.memoria`
 """
 function plot(
         result::OptimizationResult,
-        meme::String;
+        meme::String,
+        meme_iter::Union{String, Nothing}=nothing;
         mapping=x->x)
 
     if haskey(result.memoria, meme) === false
@@ -157,7 +167,15 @@ function plot(
     end
     result.memoria[meme] |>
     data -> mapping(data) |>
-    data′ -> Plots.plot(1:size(data′, 1), data′)
+    data′ -> begin
+        if (meme_iter !== nothing) && (haskey(result.memoria, meme_iter) == true)
+            data_iter = result.memoria[meme_iter]
+            len = min(length(data_iter), length(data′))
+            Plots.plot(data_iter[1:len], data′[1:len])
+        else
+            Plots.plot(1:length(data′), data′)
+        end
+    end
 end
 
 """

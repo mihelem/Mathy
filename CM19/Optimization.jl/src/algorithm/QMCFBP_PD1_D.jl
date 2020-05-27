@@ -21,7 +21,14 @@ mutable struct QMCFBPAlgorithmPD1 <: OptimizationAlgorithm{QMCFBProblem}
         algorithm = new()
         algorithm.memorabilia = Set(["objective", "Π∇L", "∇L", "p", "normΠ∇L", "normΠ∇L_μ"])
 
-        set!(algorithm, descent=descent, verbosity=verbosity, my_verba=my_verba, max_iter=max_iter, ϵ₀=ϵ₀, ε=ε, p₀=p₀)
+        set!(algorithm,
+            descent=descent,
+            verbosity=verbosity,
+            my_verba=my_verba,
+            max_iter=max_iter,
+            ϵ₀=ϵ₀,
+            ε=ε,
+            p₀=p₀)
     end
 end
 # about memorabilia
