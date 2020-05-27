@@ -45,7 +45,7 @@ end
 verba(verbosity, level, message)
 ```
 
-Verbosity utility: print message only if level ≤ verbosity. Usually in each `OptimizationAlgorithm` it is bound to a chosen verbosity level. 
+Verbosity utility: print message only if level ≤ verbosity. Usually in each `OptimizationAlgorithm` it is bound to a chosen verbosity level.
 
 **Note**
 * Maybe will be replaced by a variable specific tool, since verbosity levels are somehow arbitrary.
@@ -63,7 +63,7 @@ end
 
 **Iteration recorder**.
 Against macro hygiene, it is creating a dictionary called `memoria`, in which to save
-the requested intermediate results of computations. 
+the requested intermediate results of computations.
 
 **Example**
 ```julia
@@ -101,19 +101,23 @@ end
 
 """
 macro memento(expr)
-    if (typeof(expr) === Expr) && (expr.head === :(=))
-        l_symbol = expr.args[1]
-        while (typeof(l_symbol) === Expr) && (l_symbol.head === :ref)
-            l_symbol = l_symbol.args[1]
-        end
-        quote
-            $(expr)
-            let meme = string($(Meta.quot(l_symbol)))
-                if haskey(memoria, meme)
-                    push!(memoria[meme], deepcopy($(l_symbol)))
-                end
+    if typeof(expr) === Expr
+        if expr.head === :(=)
+            l_symbol = expr.args[1]
+            while (typeof(l_symbol) === Expr) && (l_symbol.head === :ref)
+                l_symbol = l_symbol.args[1]
             end
-        end |> esc
+            quote
+                $(expr)
+                let meme = string($(Meta.quot(l_symbol)))
+                    if haskey(memoria, meme)
+                        push!(memoria[meme], deepcopy($(l_symbol)))
+                    end
+                end
+            end |> esc
+        elseif expr.head === :function
+
+        end
     end
 end
 

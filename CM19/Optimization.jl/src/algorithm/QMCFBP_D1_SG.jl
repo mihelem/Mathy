@@ -18,7 +18,8 @@ mutable struct QMCFBPAlgorithmD1SG <: OptimizationAlgorithm{QMCFBProblem}
         μ₀=nothing) = begin
 
         algorithm = new()
-        algorithm.memorabilia = Set(["x", "μ", "L", "∂L", "norm∂L"])
+        algorithm.memorabilia =
+            Set(["x", "μ", "L", "∂L", "norm∂L", "x′", "μ′", "L′", "∂L′", "norm∂L′"])
 
         set!(
             algorithm,
@@ -100,34 +101,39 @@ function run!(
         (0.5*Q╲.*x + q + E'μ)'x - μ'b
     end
     function get_L(μ)
-        Qx̃ = get_Qx̃(μ)
-        𝔅 = in_box(Qx̃)
-        x = get_an_x(Qx̃, 𝔅)
+        x = get_an_x(μ)
         get_L(x, μ)
     end
     # @return: a subgradient of L(μ)
-    function get_∂L(x)
+    function get_∂L(x, μ)
         E*x-b
     end
-
+    function get_a_∂L(μ)
+        x = get_an_x(μ)
+        get_∂L(x, μ)
+    end
     function solve(μ₀)
         μ, x = copy(μ₀), get_an_x(μ₀)
-        L, ∂L = get_L(x, μ), get_∂L(x)
+        L, ∂L = get_L(x, μ), get_∂L(x, μ)
 
         # best solution up to now
         x′, μ′, L′, ∂L′ = copy(x), copy(μ), copy(L), copy(∂L)
 
-        init!(subgradient, _->-L, _->-∂L, μ)
+        init!(subgradient, μ->-get_L(μ), μ->-get_a_∂L(μ), μ)
         for i in 1:max_iter
             # TODO: develop stopping criteria
-            step!(subgradient, _->-L, _->-∂L, μ) |>
-                (μ′, α, sg) -> @memento μ[:] = μ′
+            (μ_t, α, sg) = step!(subgradient, μ->-get_L(μ), μ->-get_a_∂L(μ), μ)
+            @memento μ[:] = μ_t
             @memento x[:] = get_an_x(μ)
             @memento L = get_L(x, μ)
-            @memento ∂L[:] = get_∂L(x)
+            @memento ∂L[:] = get_∂L(x, μ)
             @memento norm∂L = norm(∂L)
             if L > L′
-                L′=L; ∂L′[:]=∂L; x′[:]=x; μ′[:]=μ
+                @memento L′=L
+                @memento ∂L′[:]=∂L
+                @memento norm∂L′=norm∂L
+                @memento x′[:]=x
+                @memento μ′[:]=μ
             end
         end
         return @get_result x′ μ′ L′ ∂L′

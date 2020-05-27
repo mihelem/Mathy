@@ -5,7 +5,7 @@ using ..Optimization
 using ..Optimization.Utils
 
 import ..Optimization.Descent: init!, step!
-export  SubgradientMethod, init!, step!
+export  SubgradientMethod, DeflectedSubgradientMethod, init!, step!
 
 # Subgradient methods
 abstract type SubgradientMethod end
@@ -119,4 +119,52 @@ end
 
 abstract type DeflectedSubgradientMethod <: SubgradientMethod end
 
+mutable struct PolyakEllipStepSize <: DeflectedSubgradientMethod
+    gen_γ
+
+    i
+    B
+    g
+    f_best
+    f_opt
+    PolyakEllipStepSize(;f_opt=nothing, gen_γ=nothing) = begin
+        M = new()
+        @some M.gen_γ = gen_γ
+        if f_opt !== nothing
+            M.f_opt = () -> f_opt
+        else
+            M.f_opt = () -> M.f_best - M.gen_γ(M.i+=1)
+        end
+        M
+    end
+end
+function init!(M::PolyakEllipStepSize, f, ∂f, x)
+    M.i = 0
+    M.B = I
+    M.f_best = Inf
+    M.g = ∂f(x)
+end
+function step!(M::PolyakEllipStepSize, f, ∂f, x)
+    f_val = f(x)
+    M.f_best = min(M.f_best, f_val)
+
+    f_opt = M.f_opt()
+    g = copy(M.g)
+    Bᵀg = M.B'g
+    normBᵀg = norm(Bᵀg)
+    h = (f_val - f_opt) / normBᵀg
+    ξ = Bᵀg / normBᵀg
+    Bξ = M.B*ξ
+    x′ = x - h*Bξ
+    M.g = ∂f(x′)
+    Bᵀg′ = M.B'M.g
+    normBᵀg′ = norm(Bᵀg′)
+    ξ′ = Bᵀg′ / normBᵀg′
+    μ = ξ⋅ξ′
+    if μ < 0.0
+        η = √(1-μ*μ) |> γ -> (1.0/γ - 1.0)*ξ′ - μ*ξ/γ
+        M.B += (M.B*η)*ξ′'
+    end
+    (x′, h, Bξ)
+end
 end     # end module Subgradient

@@ -121,12 +121,18 @@ Arguments:
 * `meme :: String`
 
 """
-function plot!(cur_plot::Plots.Plot, result::OptimizationResult, meme::String)
+function plot!(
+        cur_plot::Plots.Plot,
+        result::OptimizationResult,
+        meme::String;
+        mapping=x->x)
+
     if haskey(result.memoria, meme) === false
         return
     end
-    result.memoria[meme] |> (
-        data -> Plots.plot!(cur_plot, 1:size(data, 1), data))
+    result.memoria[meme] |>
+    data -> mapping(data) |>
+    data′ -> Plots.plot!(cur_plot, 1:size(data′, 1), data′)
 end
 
 """
@@ -141,12 +147,17 @@ Plot the intermediate data with key `meme` as retrieved from `result.memoria`
 * `meme :: String`
 
 """
-function plot(result::OptimizationResult, meme::String)
+function plot(
+        result::OptimizationResult,
+        meme::String;
+        mapping=x->x)
+
     if haskey(result.memoria, meme) === false
         return
     end
-    result.memoria[meme] |> (
-        data -> Plots.plot(1:size(data, 1), data))
+    result.memoria[meme] |>
+    data -> mapping(data) |>
+    data′ -> Plots.plot(1:size(data′, 1), data′)
 end
 
 """
@@ -162,7 +173,11 @@ Save the plot `cur_plot` in the dictionary `result.plots` with the key `meme`
 * `cur_plot :: Plots.Plot`
 
 """
-function set!(result::OptimizationResult, meme::String, cur_plot::Plots.Plot)
+function set!(
+        result::OptimizationResult,
+        meme::String,
+        cur_plot::Plots.Plot)
+
     result.plots[meme] = cur_plot
     result
 end
@@ -188,12 +203,13 @@ set!(instance; problem = nothing, solver = nothing, result = nothing, algorithm 
 * `options :: Union{Nothing, OptimizationSolverOptions{>: P}}`
 
 """
-function set!(instance::OptimizationInstance{P};
-    problem::Union{Nothing, P} = nothing,
-    solver::Union{Nothing, OptimizationSolver{>: P}} = nothing,
-    result::Union{Nothing, OptimizationResult{P}} = nothing,
-    algorithm::Union{Nothing, OptimizationAlgorithm{>: P}} = nothing,
-    options::Union{Nothing, OptimizationSolverOptions{>: P}} = nothing) where {P <: OptimizationProblem}
+function set!(
+        instance::OptimizationInstance{P};
+        problem::Union{Nothing, P} = nothing,
+        solver::Union{Nothing, OptimizationSolver{>: P}} = nothing,
+        result::Union{Nothing, OptimizationResult{P}} = nothing,
+        algorithm::Union{Nothing, OptimizationAlgorithm{>: P}} = nothing,
+        options::Union{Nothing, OptimizationSolverOptions{>: P}} = nothing) where {P <: OptimizationProblem}
 
     @some instance.problem = problem
     @some instance.solver = solver
@@ -226,7 +242,11 @@ Save the plot `cur_plot` in the dictionary `instance.result.plots` with the key 
 * `cur_plot::Plots.Plot`
 
 """
-function set!(instance::OptimizationInstance, meme::String, cur_plot::Plots.Plot)
+function set!(
+        instance::OptimizationInstance,
+        meme::String,
+        cur_plot::Plots.Plot)
+
     set!(instance.result, meme, cur_plot)
     instance
 end
@@ -260,6 +280,7 @@ include("subgradient.jl")
 using .Subgradient
 export  Subgradient,
         SubgradientMethod,
+        DeflectedSubgradientMethod,
         init!,
         step!
 
