@@ -231,7 +231,7 @@ end
 
 mutable struct RMSProp <: DeflectedSubgradientMethod
     α # learning rate, e.g. 0.00007, better
-    γ # decay, e.g. 0.99999, better 0.999999
+    γ # decay, e.g. 0.99999, better 0.9999999 (1-1e-8)
     ϵ # small value
 
     s # sum of squared gradient

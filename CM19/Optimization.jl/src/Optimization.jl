@@ -122,11 +122,11 @@ Arguments:
 
 """
 function plot!(
-        cur_plot::Plots.Plot,
-        result::OptimizationResult,
-        meme::String,
-        meme_iter::Union{String, Nothing}=nothing;
-        mapping=x->x)
+    cur_plot::Plots.Plot,
+    result::OptimizationResult,
+    meme::String,
+    meme_iter::Union{String, Nothing}=nothing;
+    mapping=x->x)
 
     if haskey(result.memoria, meme) === false
         return
@@ -157,10 +157,10 @@ Plot the intermediate data with key `meme` as retrieved from `result.memoria`
 
 """
 function plot(
-        result::OptimizationResult,
-        meme::String,
-        meme_iter::Union{String, Nothing}=nothing;
-        mapping=x->x)
+    result::OptimizationResult,
+    meme::String,
+    meme_iter::Union{String, Nothing}=nothing;
+    mapping=x->x)
 
     if haskey(result.memoria, meme) === false
         return
@@ -192,9 +192,9 @@ Save the plot `cur_plot` in the dictionary `result.plots` with the key `meme`
 
 """
 function set!(
-        result::OptimizationResult,
-        meme::String,
-        cur_plot::Plots.Plot)
+    result::OptimizationResult,
+    meme::String,
+    cur_plot::Plots.Plot)
 
     result.plots[meme] = cur_plot
     result

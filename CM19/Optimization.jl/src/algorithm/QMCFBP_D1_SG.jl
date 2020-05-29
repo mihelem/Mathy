@@ -19,7 +19,7 @@ mutable struct QMCFBPAlgorithmD1SG <: OptimizationAlgorithm{QMCFBProblem}
 
         algorithm = new()
         algorithm.memorabilia =
-            Set(["x", "μ", "L", "∂L", "norm∂L", "x′", "μ′", "L′", "∂L′", "norm∂L′"])
+            Set(["x", "μ", "L", "∂L", "norm∂L", "x′", "μ′", "L′", "∂L′", "norm∂L′", "i′"])
 
         set!(
             algorithm,

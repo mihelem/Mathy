@@ -18,7 +18,7 @@ module MinCostFlow
 using LinearAlgebra
 using SparseArrays
 using Parameters
-using DataStructures: PriorityQueue
+using DataStructures: PriorityQueue, peek, dequeue!
 
 using ..Optimization
 using ..Optimization.MinQuadratic
