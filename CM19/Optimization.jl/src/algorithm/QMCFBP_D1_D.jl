@@ -188,6 +188,9 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         # argmin || E[:, 𝔫]*x[𝔫] + E[:, .~𝔫]*x[.~𝔫] - b ||
         # ≡ argmin || E₁*x₁ + E₀*x₀ - b ||
         # ≡ argmin ½x₁'E₁'E₁x₁ + (E₀*x₀-b)'E₁*x₁
+        # println("Solve NaN: Q : $(E[:, nanny]'E[:, nanny])")
+        # println("Solve NaN: q : $(E[:, nanny]'*(E[:, .~nanny]*x[.~nanny]-b))")
+        # println("Solve NaN: x : $(x[.~nanny])")
         𝔓₁ = MinQuadratic.MQBProblem(
             E[:, nanny]'E[:, nanny],
             E[:, nanny]'*(E[:, .~nanny]*x[.~nanny]-b),
@@ -196,7 +199,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         instance = OptimizationInstance{MinQuadratic.MQBProblem}()
         algorithm = MinQuadratic.MQBPAlgorithmPG1(
             descent=MinQuadratic.QuadraticBoxPCGDescent(),
-            verbosity=1,
+            verbosity=-1,
             max_iter=1000,
             ε=ε,
             ϵ₀=1e-12)
@@ -236,9 +239,10 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         ᾱ, outward, p = 0.0, false, [0,0]
         while length(pq) > 0
             next_ᾱ, next_outward, next_p = peek(pq)[2];
-            verba(1, "\nnext_ᾱ = $next_ᾱ")
+            # verba(1, "\nnext_ᾱ = $next_ᾱ")
             if filter_ᾱ(next_p, next_outward, 𝔅) == false
                 println("ATTENZIONE: filtrato ᾱ")
+                dequeue!(pq)
                 continue
             end
             if !(pq.o.simeq(ᾱ, next_ᾱ) && (next_outward == outward))
@@ -249,9 +253,9 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
                     end
                 else
                     α_frac[:] = get_α_frac()
-                    print("α_frac = $(α_frac)")
+                    # print("α_frac = $(α_frac)")
                     α = α_frac[1] / α_frac[2]
-                    println(" ::  would like α = $α")
+                    # println(" ::  would like α = $α")
                     if (s*(α-ᾱ) |> a -> (a ≤ 0.0 || isnan(a)))
                         return (ᾱ, 𝔅)
                     end
@@ -276,7 +280,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
     function step′(d, x, μ, Q╲, q, E, b, kerny; ϵ=ϵₘ, ϵₘ=ϵₘ)
         Eᵀμ = E'μ
         𝔅 = in_box(Eᵀμ, Ql, Qu, q, ϵ=-ϵₘ)
-        println("before line search 𝔅 : $𝔅")
+        # println("before line search 𝔅 : $𝔅")
         𝔐μ = .~simeq.(d / norm(d, Inf), 0.0, ϵ)
         Eᵀd, bᵀd = E[𝔐μ, :]'d[𝔐μ], b[𝔐μ]'d[𝔐μ]
         𝔐x = .~simeq.(Eᵀd / norm(Eᵀd, Inf), 0.0, ϵ)
@@ -287,7 +291,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         pq₊, pq₋, ΔQx̃ = get_priority_ΔQx̃(Eᵀμ′, Eᵀd′, q′, 𝔅′, Ql′, Qu′; ϵ=ϵₘ)
 
         dᵀ∇L = Eᵀd′'*x′ - bᵀd
-        println("dᵀ∇L = $dᵀ∇L")
+        # println("dᵀ∇L = $dᵀ∇L")
 
         α, next_𝔅′ =
             line_search′(pq₊, pq₋, μ, 𝔅′, Q╲′, kerny′, q′, Eᵀd′, bᵀd, Eᵀμ′, l′, u′)
@@ -295,10 +299,13 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         next_μ = μ + α*d.*𝔐μ
         next_𝔅 = copy(𝔅)
         next_𝔅[𝔐x, :] = next_𝔅′
-        println("next_𝔅 : $next_𝔅")
+        # println("next_𝔅 : $next_𝔅")
         next_x = copy(x)
-        next_x[𝔐x] = min.(max.((-Eᵀμ′-α*Eᵀd′-q′)./ Q╲′, l′), u′) 
-        nanny = next_𝔅[:, 2] .& kerny
+        next_x[𝔐x] = min.(max.((-Eᵀμ′-α*Eᵀd′-q′)./ Q╲′, l′), u′)
+        next_x[next_𝔅[:, 1]] = l[next_𝔅[:, 1]]
+        next_x[next_𝔅[:, 3]] = u[next_𝔅[:, 3]]
+        nanny = (next_𝔅[:, 2] .& kerny)
+        # println("nanny : $nanny\nkerny : $kerny\nnext_𝔅[:, 2] : $(next_𝔅[:, 2])")
         if any(nanny)
             best_primal_∂!(next_x, nanny, E, b, l, u)
         end
@@ -332,11 +339,11 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             end
 
             x[:], μ[:], 𝔅 = step′(d, x, μ, Q╲, q, E, b, kerny, ϵ=ϵₘ, ϵₘ=ϵₘ)
-            println("\nx : $x")
+            # println("\nx : $x")
             # TODO: better @memento
             ∂L₀[:], ∂L[:] = ∂L, E*x-b
             β = max((∂L'*∂L - ∂L'*∂L₀) / (∂L₀'*∂L₀), 0.0)
-            println("β : $β")
+            # println("β : $β")
             d[:] = ∂L + β*d
         end
 
