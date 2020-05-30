@@ -121,6 +121,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         E, b, μ = E[1:end-1, :], b[1:end-1], μ[1:end-1]
     end
     Ql, Qu = Q*l, Q*u
+    m, n = size(E)
 
     function simeq(a::AbstractFloat, b::AbstractFloat, ϵ=0.0)
         abs(a-b) ≤ ϵ
@@ -200,9 +201,9 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         algorithm = MinQuadratic.MQBPAlgorithmPG1(
             descent=MinQuadratic.QuadraticBoxPCGDescent(),
             verbosity=-1,
-            max_iter=1000,
-            ε=ε,
-            ϵ₀=1e-12)
+            max_iter=1000,      # TODO: set properly
+            ε=ε/n,              # TODO: set properly
+            ϵ₀=1e-12)           # TODO: set properly
         Optimization.set!(instance,
             problem=𝔓₁,
             algorithm=algorithm,
@@ -279,7 +280,10 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
     end
     function step′(d, x, μ, Q╲, q, E, b, kerny; ϵ=ϵₘ, ϵₘ=ϵₘ)
         Eᵀμ = E'μ
-        𝔅 = in_box(Eᵀμ, Ql, Qu, q, ϵ=-ϵₘ)
+        𝔅 = zeros(Bool, length(x), 3)
+        Qx̃ = -Eᵀμ-q; x̃ = Qx̃ ./ Q╲
+        inbox = (x, u, l, 𝔅, m, ϵ) -> (𝔅[m, :] = in_box(x[m], l[m], u[m], ϵ=ϵ))
+        inbox(Qx̃, Qu, Ql, 𝔅, kerny, -ϵₘ); inbox(x̃, u, l, 𝔅, .~kerny, ϵₘ)
         # println("before line search 𝔅 : $𝔅")
         𝔐μ = .~simeq.(d / norm(d, Inf), 0.0, ϵ)
         Eᵀd, bᵀd = E[𝔐μ, :]'d[𝔐μ], b[𝔐μ]'d[𝔐μ]

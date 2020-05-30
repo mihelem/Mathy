@@ -275,3 +275,26 @@ export  run!,
         QMCFBPSolverOptions,
         MinCostFlowProblem
 end     # end of module MinCostFlow
+
+"""
+In the REPL, the following snippet may be usefulel to manually explore the
+space of parameters. TODO -> make a macro working for every algo/subgradient etc..
+```julia
+using Optimization.Utils
+function rupl!(;
+        α=nothing,
+        β=nothing,
+        p=nothing,
+        to_plot="norm∂L′",
+        map=x->log10.(x))
+   @some algorithm.subgradient.α = α
+   @some algorithm.subgradient.β = β
+   run!(test)
+   if p === nothing
+       return plot(test.result, to_plot, "i′", mapping=map)
+   else
+       plot!(p, test.result, to_plot, "i′", mapping=map)
+   end
+end
+```
+"""

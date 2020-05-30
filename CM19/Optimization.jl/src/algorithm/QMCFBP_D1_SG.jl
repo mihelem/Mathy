@@ -119,7 +119,7 @@ function run!(
         L, ∂L = get_L(x, μ), get_∂L(x, μ)
 
         # best solution up to now
-        x′, μ′, L′, ∂L′ = copy(x), copy(μ), copy(L), copy(∂L)
+        x′, μ′, L′, ∂L′ = copy(x), copy(μ), -Inf, copy(∂L)
 
         init!(subgradient, μ->-get_L(μ), μ->-get_a_∂L(μ), μ)
         for i in 1:max_iter

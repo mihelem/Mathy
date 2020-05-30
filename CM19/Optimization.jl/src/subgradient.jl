@@ -210,8 +210,8 @@ end
 mutable struct NesterovMomentum <: DeflectedSubgradientMethod
     α # learning rate
     β # momentum decay
-    v # momentum
 
+    v # momentum
     NesterovMomentum(;α=nothing, β=nothing) = begin
         M = new()
         @some M.α = α
@@ -343,7 +343,7 @@ function step!(M::HyperGradient, f, ∂f, x)
 end
 
 mutable struct HyperNesterovMomentum <: DeflectedSubgradientMethod
-    α₀ # initila learning rate
+    α₀ # initial learning rate
     µ # learning rate of the learning rate
     β # momentum decay
 

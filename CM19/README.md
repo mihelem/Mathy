@@ -26,7 +26,7 @@ Then you are ready to go.
 Here are some examples, which may give you an idea of where you can go with this package.
 
 ### QMCFBP : Quadratic Min Cost Flow Boxed Problem (...separable convex...)
-__→ mincostflow.jl__
+`→ mincostflow.jl`
 
 `minₓ { ½xᵀQx + qᵀx  with  x s.t.  Ex = b  &  l ≤ x ≤ u }`
 with
@@ -35,10 +35,10 @@ with
 
 **Deflected Subgradient**
 
-__→ QMCFBP_*_SG.jl__
+`→ QMCFBP_*_SG.jl`
 
 Here we are instantiating and running an instance of a QMCFB problem randomly generated
-where the algorithm of choice has been one of the deflected subgradient methods, `RMSProp`.
+where the algorithm of choice is one of the deflected subgradient methods, `RMSProp`.
 ```julia
 using Optimization
 subgradient =
@@ -82,4 +82,29 @@ __→ minquadratic.jl__
 
 ```julia
 
+```
+
+### Code Snippets
+
+**Investigate parameter space manually**
+
+In the REPL, the following snippet may be useful to manually explore the
+space of parameters. _TODO_ -> make a macro working for every algo/subgradient etc..
+```julia
+using Optimization.Utils
+function rupl!(;
+        α=nothing,
+        β=nothing,
+        p=nothing,
+        to_plot="norm∂L′",
+        map=x->log10.(x))
+   @some algorithm.subgradient.α = α
+   @some algorithm.subgradient.β = β
+   run!(test)
+   if p === nothing
+       return plot(test.result, to_plot, "i′", mapping=map)
+   else
+       plot!(p, test.result, to_plot, "i′", mapping=map)
+   end
+end
 ```

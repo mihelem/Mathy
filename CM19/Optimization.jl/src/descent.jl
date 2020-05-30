@@ -12,10 +12,11 @@ export  DescentMethod, init!, step!, GradientDescent, ConjugateGradientDescent, 
         NoisyDescent
 
 # Zeroth Order Methods
-
+function nelder_mead(f, S, ϵ; α=1.0, β=2.0, γ=0.5)
+end
 # First Order Methods
-abstract type DescentMethod end
 
+abstract type DescentMethod end
 mutable struct GradientDescent <: DescentMethod
     α
 
@@ -90,7 +91,7 @@ end
 mutable struct AdagradDescent <: DescentMethod
     α # learning rate
     ϵ # small value
-    s # sum of squared gradient 
+    s # sum of squared gradient
 
     AdagradDescent() = new(0.01, 1e-8)
 end
@@ -158,7 +159,7 @@ end
 function init!(M::AdamDescent, f, ∇f, x)
     M.k = 0
     M.v = zeros(length(x))
-    M.s = zeros(length(x)) 
+    M.s = zeros(length(x))
     return M
 end
 function step!(M::AdamDescent, f, ∇f, x)
