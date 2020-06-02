@@ -5,7 +5,11 @@ using ..Optimization
 using ..Optimization.Utils
 
 import ..Optimization.Descent: init!, step!
-export  SubgradientMethod, DeflectedSubgradientMethod, init!, step!
+export  SubgradientMethod,
+    DualSubgradientMethod,
+    DeflectedSubgradientMethod,
+    init!,
+    step!
 
 # Subgradient methods
 abstract type SubgradientMethod end
@@ -13,6 +17,7 @@ abstract type SubgradientMethod end
 mutable struct WithStopCriterion{M} <: SubgradientMethod where M <: SubgradientMethod
     method::M
     R               # (estimate) upper bound on the size of the region
+
     l               # lower bound on the objective function
     l′              # best lower bound
 end
@@ -89,7 +94,6 @@ mutable struct PolyakStepSize <: SubgradientMethod
     i           # iteration counter, needed for γ
     f_best      # useful when f_opt should be estimated
     gen_α       # Polyak step size generator
-
     PolyakStepSize(;f_opt=nothing, gen_γ=nothing) = begin
         M = new()
         @some M.f_opt = f_opt
@@ -117,8 +121,70 @@ function step!(M::PolyakStepSize, f, ∂f, x)
     (x-α*sg, α, sg)
 end
 
-abstract type DeflectedSubgradientMethod <: SubgradientMethod end
+abstract type DualSubgradientMethod <: SubgradientMethod end
 
+# Ergodic sequences of primal iterates have guarantee of convergence
+# toward the primal space corresponding to the optimal dual
+# In general
+#       x̅ᵗ = ∑ᵗ⁻¹ ηₛᵗxˢ    with  ∑ηₛᵗ = 1  and  ηₛᵗ ≥ 0
+# and defining
+#       γₛᵗ = ηₛᵗ / αₛ
+# with the assumptions
+#   γₛ₋₁ᵗ ≤ γₛᵗ
+#   Δγₘₐₓᵗ → 0
+#   γ₀ᵗ → 0  and  ∃ Γ > 0 :  γₜ₋₁ᵗ ≤ Γ
+# it is possible to prove the summentioned convergence in primal space.
+# ---------------------------------------------------------------------
+# Specific instances:
+# (*) Harmonic + sᵏ-rule
+# αₜ = a / (1 + b*t)
+# ηₛᵗ = (s+1)ᵏ / ∑ᵗ⁻¹(l+1)ᵏ
+# Cit.
+# 1) "Primal convergence from dual subgradient methods for convex optimization"
+#       Emil Gustavsson, Michael Patriksson, Ann-Brith Stromberg
+# 2) "Ergodic, primal convergence in dual subgradient schemes
+#        for convex programming, II: the case of inconsistent primal problems"
+#     Magnus Onnheim, Emil Gustavsson, Ann-Brith Stromberg,
+#       Michael Patriksson, Torbjorn Larsson
+mutable struct HarmonicErgodicPrimalStep <: DualSubgradientMethod
+    k       # exponent, 4 seems nice
+    a       # a in α = 1.0 / (a + bt)
+    b       # ^
+
+    x̅      # primal convex combination
+    t      # iteration counter
+    Sₜ     # ∑ᵗ⁻¹ (l+1)ᵏ
+    Sₜ₋₁   # ∑ᵗ⁻¹ lᵏ
+    HarmonicErgodicPrimalStep(; k=0, a=nothing, b=nothing) = begin
+        M = new()
+        M.k = k
+        @some M.a = a
+        @some M.b = b
+        M
+    end
+end
+function init!(M::HarmonicErgodicPrimalStep, get_x, is_le, L, ∂L, u)
+    M.t = 0
+    M.Sₜ, M.Sₜ₋₁ = 0.0, 0.0
+    M.x̅ = get_x(u)
+end
+# @Input:
+# ∂L : this is a dual specific method (so do not pass with minus sign e.g. -∂L)
+function step!(M::HarmonicErgodicPrimalStep, get_x, is_le, L, ∂L, u)
+    tᵏ = (M.t+=1)^M.k
+
+    M.Sₜ₋₁, M.Sₜ = M.Sₜ, M.Sₜ+tᵏ
+    x = get_x(u)
+    M.x̅ = (M.Sₜ₋₁*M.x̅ + tᵏ*x) / M.Sₜ
+
+    α = 1.0 / (M.a + M.b*M.t)
+    d = ∂L(x, u)
+    u = u + α*d
+    u[is_le] = max.(u[is_le], 0.0)
+    (u, α, d)
+end
+
+abstract type DeflectedSubgradientMethod <: SubgradientMethod end
 mutable struct PolyakEllipStepSize <: DeflectedSubgradientMethod
     gen_γ
     ϵ
@@ -168,6 +234,59 @@ function step!(M::PolyakEllipStepSize, f, ∂f, x)
         M.B += (M.B*η)*ξ′'
     end
     (x′, h, Bξ)
+end
+
+# For β=0, the next one is Polyak
+mutable struct FilteredPolyakStepSize <: DeflectedSubgradientMethod
+    β           # β ∈ [0, 1] memory
+    f_opt       # optimum objective value if available
+    gen_γ       # estimated error in objective
+
+    i           # iteration counter, needed for γ
+    f_best      # useful when f_opt should be estimated
+    gen_α       # Filtered Polyak step size generator
+    s           # filtered subgradient
+    FilteredPolyakStepSize(; f_opt=nothing, gen_γ=nothing, β=nothing) = begin
+        M = new()
+        @some M.f_opt = f_opt
+        @some M.gen_γ = gen_γ
+        @some M.β = β
+
+        if f_opt !== nothing
+            M.gen_α = (f, s) -> (f-M.f_opt) / (s's)
+        elseif gen_γ !== nothing
+            M.gen_α = (f, s) -> begin
+                M.f_best = min(M.f_best, f)
+                (M.gen_γ(M.i+=1) |>
+                γ -> (f-M.f_best+γ) / (s's))
+            end
+        end
+        M
+    end
+end
+function init!(M::FilteredPolyakStepSize, f, ∂f, x)
+    M.f_best = Inf
+    M.i = 0
+    M.s = ∂f(x)
+end
+function step!(M::FilteredPolyakStepSize, f, ∂f, x)
+    sg, s, β, gen_α = ∂f(x), M.s, M.β, M.gen_α
+
+    s[:] = (1-β)*sg + β*s
+    α = gen_α(f(x), s)
+
+    (x-α*s, α, s)
+end
+
+# Camerini, Fratta, Maffioli
+mutable struct CFMStepSize <: DeflectedSubgradientMethod
+    get_γ   # γ ∈ [0, 2] - suggested value 1.5
+
+end
+function init!(M::CFMStepSize, f, ∂f, x)
+end
+function step!(M::CFMStepSize, f, ∂f, x)
+
 end
 
 mutable struct Adagrad <: DeflectedSubgradientMethod

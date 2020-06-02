@@ -31,8 +31,8 @@ function hessenberg_gram_schmidt(A, b, n)
     H = zeros(eltype(A), (n+1, n))
 
     v = b ./ sqrt(b' * b)
-    Q[1:m, 1] = v 
-    
+    Q[1:m, 1] = v
+
     for i=1:n
         v = A*Q[1:m, i]
         for j=1:i
@@ -150,7 +150,7 @@ end
 function rayleigh_inverse_iteration(A, v, n, λ)
     m, m = size(A)
     for i=1:n
-        v = (A-λ.*I(m))\v 
+        v = (A-λ.*I(m))\v
         v /= norm(v)
         λ = v'*A*v
         println("$v -> $λ")
@@ -205,7 +205,7 @@ function Arnoldi_naive(A, b, k₀, ϵ)
     H = zeros(eltype(A), (1, 0))
     while true
         Q, H, k = Arnoldi_iterations(A, Q, H, k₀, ϵ)
-        println(eigvals(H[1:end-1, :])) 
+        println(eigvals(H[1:end-1, :]))
         if k != k₀
             return (Q, H)
         end
@@ -266,11 +266,11 @@ function GMRES_naive(A, b, k, ϵ, ϵₐ)
         Λ = [Λ; T[i, i]]
         T[1:i, i] ./= Λ
 
-        
+
         # update solution via pseudoinversion
         y₀ = [y₀; H[1, i]' * 𝖇]
         y₁ = [y₁; y₀[i] - T[1:i-1, i]'*y₁]
-        
+
         # calculate error ||Axᵢ-b||₂ in O(i)
         y₁₁ = [y₁₁; y₁[i]/Λ[i]']
         H̃ᵢy = [y₁₁; 0]
@@ -282,7 +282,7 @@ function GMRES_naive(A, b, k, ϵ, ϵₐ)
         println(𝖗ᵢ)
 
         # BEGIN - for Testing Purposes
-        # this is Σ O(i^2) = O(k^3), in final version calculate y₃ outside the 
+        # this is Σ O(i^2) = O(k^3), in final version calculate y₃ outside the
         # for cycle with a single inversion of triangular, so O(k^2)
         # y₂ = y₁ ./ (transpose(Λ') .* Λ)
         # Δy₃ = zeros(eltype(Λ), size(y₂))
@@ -379,7 +379,7 @@ end
 function test_bi(m, n, d=1., ϵ=1e-6; A′=nothing)
     A = A′ === nothing ? Float64.(rand(1:m*n, m, n)) : A′
     x = [1.; zeros(n-1)]
-    
+
     function test(f)
         U, V, J = f(A, x)
 
@@ -401,7 +401,7 @@ function test_bi(m, n, d=1., ϵ=1e-6; A′=nothing)
         println("rank(A) = ", rank(𝔄))
         # println("𝔲 : ", 𝔲)
         # println("𝔳 : ", 𝔳)
-        
+
         println("|A-V*J'*U'|/|A| = ", norm(A-V*J'*U')/norm(A))
         #m, n = size(J)
         #for i=1:n-2
@@ -419,9 +419,18 @@ function test_bi(m, n, d=1., ϵ=1e-6; A′=nothing)
     return (A, x, U, V, J)
 end
 
-export  bidiagonal_decomposition_handmade2, bidiagonal_decomposition_handmade, GMRES_naive, Arnoldi_naive,
-        Arnoldi_iterations, rayleigh_inverse_iteration, rayleigh_iteration, hessenberg_via_householder,
-        choleski_factorisation, gaussian_elimination_row_pivot, gaussian_elimination, hessenberg_gram_schmidt,
-        QR_gram_schmidt
+export  bidiagonal_decomposition_handmade2,
+    bidiagonal_decomposition_handmade,
+    GMRES_naive,
+    Arnoldi_naive,
+    Arnoldi_iterations,
+    rayleigh_inverse_iteration,
+    rayleigh_iteration,
+    hessenberg_via_householder,
+    choleski_factorisation,
+    gaussian_elimination_row_pivot,
+    gaussian_elimination,
+    hessenberg_gram_schmidt,
+    QR_gram_schmidt
 
 end     # end module Numerical

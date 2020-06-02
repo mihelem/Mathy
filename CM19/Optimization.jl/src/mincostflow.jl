@@ -297,4 +297,27 @@ function rupl!(;
    end
 end
 ```
+
+Then to explore the pseudospectra of the incidence matrix:
+```julia
+test = get_test(algorithm, m=20, n=40, singular=8, active=100);
+𝔓 = test.problem;
+Q, q, l, u, E, b = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b);
+spectralportrait(Array(E'E))
+```
+
+To check correlation with vertex degree
+```julia
+function print_degree(E)
+   Ep = copy(E)
+   Ep[Ep.<1] .= 0
+   Em = copy(E)
+   Em[Em.>-1] .= 0
+   p = sum([c for c in eachcol(Ep)])
+   m = sum([c for c in eachcol(Em)])
+   p, m
+end
+
+println.([zip(print_degree(E)...)...]);
+```
 """

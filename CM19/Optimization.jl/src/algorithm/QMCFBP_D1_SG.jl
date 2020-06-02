@@ -19,7 +19,19 @@ mutable struct QMCFBPAlgorithmD1SG <: OptimizationAlgorithm{QMCFBProblem}
 
         algorithm = new()
         algorithm.memorabilia =
-            Set(["x", "μ", "L", "∂L", "norm∂L", "x′", "μ′", "L′", "∂L′", "norm∂L′", "i′"])
+            Set([
+                "x̅",        # → X(μ) see HarmonicErgodicPrimalStep ∈ Subgradient
+                "x",        # primal coordinate
+                "μ",        # constraint dual vector
+                "L",        # Lagrangian
+                "∂L",       # ∂L ∈ subgradient L(μ)
+                "norm∂L",   # norm(∂L, Inf)
+                "x′",       # x for new best L
+                "μ′",       # μ for new best L
+                "L′",       # new best L
+                "∂L′",      # ∂L for each new best L
+                "norm∂L′",  # norm(∂L, Inf) for each new best L
+                "i′"])      # iteration counter for each new best L
 
         set!(
             algorithm,
@@ -121,15 +133,44 @@ function run!(
         # best solution up to now
         x′, μ′, L′, ∂L′ = copy(x), copy(μ), -Inf, copy(∂L)
 
-        init!(subgradient, μ->-get_L(μ), μ->-get_a_∂L(μ), μ)
+        wrapper = (func!, subgradient, x, μ, f_μ, f_xμ, ∂f_μ, ∂f_xμ) -> begin
+            if typeof(subgradient) <: DualSubgradientMethod
+                func!(subgradient, x, zeros(Bool, length(μ)), f_xμ, ∂f_xμ, μ)
+            else
+                func!(subgradient, f_μ, ∂f_μ, μ)
+            end
+        end
+        get_x̅ = (typeof(subgradient) <: DualSubgradientMethod) ?
+            () -> subgradient.x̅ :
+            () -> nothing
+
+        wrapper(init!,
+            subgradient,
+            μ -> get_an_x(μ),
+            μ,
+            μ -> -get_L(μ),
+            (x, μ) -> get_L(x, μ),
+            μ -> -get_a_∂L(μ),
+            (x, μ) -> get_∂L(x, μ))
         for i in 1:max_iter
             # TODO: develop stopping criteria
-            (μ_t, α, sg) = step!(subgradient, μ->-get_L(μ), μ->-get_a_∂L(μ), μ)
+            (μ_t, α, sg) =
+                wrapper(step!,
+                    subgradient,
+                    μ -> get_an_x(μ),
+                    μ,
+                    μ -> -get_L(μ),
+                    (x, μ) -> get_L(x, μ),
+                    μ -> -get_a_∂L(μ),
+                    (x, μ) -> get_∂L(x, μ))
+
+            #step!(subgradient, μ->-get_L(μ), μ->-get_a_∂L(μ), μ)
             @memento μ[:] = μ_t
             @memento x[:] = get_an_x(μ)
             @memento L = get_L(x, μ)
             @memento ∂L[:] = get_∂L(x, μ)
             @memento norm∂L = norm(∂L)
+            @memento x̅ = get_x̅()
             if L > L′
                 @memento L′=L
                 @memento ∂L′[:]=∂L
@@ -139,7 +180,9 @@ function run!(
                 @memento i′=i
             end
         end
-        return @get_result x′ μ′ L′ ∂L′
+        x̅ = get_x̅()
+
+        return @get_result x′ μ′ L′ ∂L′ x̅
     end
 
     solve(μ₀) |> result ->

@@ -298,6 +298,7 @@ include("subgradient.jl")
 using .Subgradient
 export  Subgradient,
         SubgradientMethod,
+        DualSubgradientMethod,
         DeflectedSubgradientMethod,
         init!,
         step!
@@ -397,3 +398,22 @@ end # end module Optimization
 # test = get_test(algorithm, n=10)
 # test.solver.options.memoranda = Set(["normΠ∇f"])
 # include("optimization.jl"); using .Optimization; algorithm = MQBPAlgorithmPG1(descent=QuadraticBoxPCGDescent(), verbosity=1, max_iter=1000, ε=1e-7, ϵ₀=1e-8); test = get_test(algorithm, n=10); test.solver.options.memoranda = Set(["normΠ∇f"])
+
+# How to save Plots:
+"""
+```julia
+#First, generate your plot using Plots.jl:
+using Plots
+hdf5() #Select HDF5-Plots "backend"
+p = plot(...) #Construct plot as usual
+
+#Then, write to .hdf5 file:
+Plots.hdf5plot_write(p, "plotsave.hdf5")
+
+#After you re-open a new Julia session, you can re-read the .hdf5 plot:
+using Plots
+pyplot() #Must first select some backend
+pread = Plots.hdf5plot_read("plotsave.hdf5")
+display(pread)
+```
+"""

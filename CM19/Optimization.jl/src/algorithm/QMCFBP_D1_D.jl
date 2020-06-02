@@ -35,7 +35,7 @@ mutable struct QMCFBPAlgorithmD1D <: OptimizationAlgorithm{QMCFBProblem}
         plot_steps=nothing) = begin
 
         algorithm = new()
-        algorithm.memorabilia = Set(["L", "∂L", "norm∂L", "x", "μ", "α"])
+        algorithm.memorabilia = Set(["L", "∂L", "norm∂L", "x", "μ", "α", "λ"])
 
         set!(algorithm,
             descent=descent,
@@ -278,7 +278,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             dequeue!(pq)
         end
     end
-    function step′(d, x, μ, Q╲, q, E, b, kerny; ϵ=ϵₘ, ϵₘ=ϵₘ)
+    function step′(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny; ϵ=ϵₘ, ϵₘ=ϵₘ)
         Eᵀμ = E'μ
         𝔅 = zeros(Bool, length(x), 3)
         Qx̃ = -Eᵀμ-q; x̃ = Qx̃ ./ Q╲
@@ -318,7 +318,27 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
     # TODO: ϵ₀
     function solve′(μ, Q╲, q, E, b; max_iter=max_iter, ε=ε, ϵ₀=ϵₘ*ϵₘ, ϵₘ=ϵₘ)
         Ql, Qu = Q╲.*l, Q╲.*u
-        kerny = simeq.(Q╲, 0.0, ϵ₀)
+        kerny₀ = simeq.(Q╲, 0.0, ϵ₀)
+
+        λ_rate = 1.3
+        update_λ = begin
+            if cure_singularity
+                (λ, r, err) -> 0.0
+            else
+                (λ, r, err) -> begin
+                    λ′ = λ
+                    if err < λ
+                        λ′ /= r
+                        Q╲[kerny₀] = λ′
+                        Qu[kerny₀], Ql[kerny₀] = λ′ * u[kerny₀], λ′ * l[kerny₀]
+                    end
+                    λ′
+                end
+            end
+        end
+        λ_min = minimum(Q╲[.~kerny₀])
+        @memento λ = update_λ(λ_min, 10.0, 0.0)
+        kerny = cure_singularity ? kerny₀ : zeros(Bool, size(kerny₀))
 
         function get_Qx̃(μ)
             Qx̃ = -E'μ-q
@@ -332,6 +352,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         x[nanny] = 0.5*(l[nanny]+u[nanny])
 
         ∂L = E*x-b
+        L = x'*(0.5*Q╲.*x + q) + μ'*∂L
         ∂L₀ = copy(∂L)
         d = copy(∂L)
         for i in 1:max_iter
@@ -341,8 +362,9 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             if norm∂L ≤ ε
                 break
             end
+            @memento λ = update_λ(λ, λ_rate, norm∂L)
 
-            x[:], μ[:], 𝔅 = step′(d, x, μ, Q╲, q, E, b, kerny, ϵ=ϵₘ, ϵₘ=ϵₘ)
+            x[:], μ[:], 𝔅 = step′(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny, ϵ=ϵₘ, ϵₘ=ϵₘ)
             # println("\nx : $x")
             # TODO: better @memento
             ∂L₀[:], ∂L[:] = ∂L, E*x-b
@@ -351,7 +373,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             d[:] = ∂L + β*d
         end
 
-        return @get_result x μ ∂L
+        return @get_result x μ ∂L L
     end
 
     return solve′(μ, Q╲, q, E, b) |>
