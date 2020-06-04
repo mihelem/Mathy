@@ -10,7 +10,7 @@
 \newcommand{\ISSN}{ISSN 2079-6641}
 \newcommand{\OISSN}{ISSN 2079-665X}
 \newcommand{\DOI}{DOI: 10.18454/2079-6641-\MFITyear-\MFITom-\MFITnumber-\firstpage-\lastpage}  %класс статьи
-\renewcommand{\firstpage}{5} 
+\renewcommand{\firstpage}{5}
 \renewcommand{\lastpage}{12}
 %\engshortpartit{}
 %\shortpartit{}
@@ -18,7 +18,7 @@
 \ESECC{}
 \begin{document}
 \udk{УДК 512.24}% код направления
-\shorttitle{Duality in Quadratic Min Cost Flow}% 
+\shorttitle{Duality in Quadratic Min Cost Flow}%
 \author{484805$\cup$568235}
 \shortauthor{484805+568235}
 \institute{University of Pisa, Italy}
@@ -26,7 +26,7 @@
 \workabstract {We analyse the simplest dual approaches to linearly constrained quadratic Min Cost Flow problems}
 \keywords{\it }
 \rcopyr{484805$\cup$568235}
-%\rdate{Поступила в редакцию 11.09.2010~г.} 
+%\rdate{Поступила в редакцию 11.09.2010~г.}
 %\revisiondate{В окончательном варианте: 11.09.2010}
 \msc{MSC 18A32} %http://www.ams.org/msc/
 \engtitle{noML09}
@@ -38,10 +38,10 @@
 \engkeywords{\it Key words: optimization, algorithmic problem}
 \email{E-mail:}{matricola484805@gmail.com}
 \engcopyr{484805$\cup$568235}
-%\engdate{Original article submitted 11.09.2010.} 
+%\engdate{Original article submitted 11.09.2010.}
 %\engrevisiondate{Revision submitted: 11.09.2010}
 \pagestyle{myheadings}
-\maketitle 
+\maketitle
 \engmaketitle
 \pagestyle{fancy}
 \fancyhf{}
@@ -58,7 +58,7 @@ We are going to explore some possible dual approaches to solve the Min Cost Flow
 
 \begin{gather*}
 \nu_*(P) = \min_{x \in S_{(P)}} \frac{1}{2} x^\intercal Q x + q^\intercal x \\
-\textrm{where} \qquad S_{(P)} \: :\quad E x = b \quad \cap \quad l \le x \le u 
+\textrm{where} \qquad S_{(P)} \: :\quad E x = b \quad \cap \quad l \le x \le u
 \end{gather*}
 
 where $E$, of size $(m, n)$, is the node-arc incidence matrix of a directed graph, $Q::Diagonal \succcurlyeq 0$.
@@ -77,14 +77,14 @@ Box constraints are easy, so we can try to dualise only the equality constraints
 \begin{gather*}
     \nu_*(P) = \min_{x \in S_{(D1)}} \max_{\mu} L(x, \mu) \quad\ge\quad \max_{\mu} \min_{x \in S_{(D1)}} L(x, \mu) = \nu^*(D1)  \\
    \textrm{where}\qquad  L(x, \mu) = \frac{1}{2} x^\intercal Q x + q^\intercal x + \mu^\intercal (E x - b)  \\
-    \textrm{and}\qquad  S_{(D1)} \: :\quad l \le x \le u 
+    \textrm{and}\qquad  S_{(D1)} \: :\quad l \le x \le u
 \end{gather*}
 
-Since the feasible space is a box and the target function is separable and convex, to find 
+Since the feasible space is a box and the target function is separable and convex, to find
 \[
     L(\mu) = \min_{x \in S_{(D1)}} L(x, \mu) = L(\overline{x}, \mu)
 \]
-it is sufficient to solve for $x$ in 
+it is sufficient to solve for $x$ in
 \[
     \nabla_x L(\overbar{x}, \mu) = Q \overbar{x} + q + E^\intercal\mu = 0
 \]
@@ -92,7 +92,7 @@ and then project to the nearest side, component by component:
 \[
     x = \max.(l, \min.(u, -Q^{-1}(q + E^\intercal\mu)))
 \]
-A few words are due for the coordinates corresponding to $\ker Q$; in fact, for $Q_{j j} = 0$, we should look for 
+A few words are due for the coordinates corresponding to $\ker Q$; in fact, for $Q_{j j} = 0$, we should look for
 \[
     \min_x (q + E^\intercal \mu)_j x_j \implies \begin{cases}
         (q + E^\intercal \mu)_j > 0 \implies x_j = l_j \\
@@ -125,12 +125,12 @@ In the coordinate subspace defined by $\ker Q$ the Lagrangian is unbounded below
 Since $Q$ is diagonal, we can decompose the coordinate space in the kernel and the co-image by a simple partition of the coordinates, corresponding in obvious notations to $Q_0, x_0 \dots$ and $Q_1, x_1, \dots$. Hence, \emph{for the interesting (finite) minima of $L$ varying $x$}, we have
     \begin{gather*}
     Q \Bar{x}(\gamma) + \gamma + q = 0 \implies \\
-    L(\mu, \gamma, \lambda_u) = L(\Bar{x}(\gamma), \mu, \gamma, \lambda_u) = \min_x L(x, \mu, \gamma, \lambda_u) = \dots \\ 
+    L(\mu, \gamma, \lambda_u) = L(\Bar{x}(\gamma), \mu, \gamma, \lambda_u) = \min_x L(x, \mu, \gamma, \lambda_u) = \dots \\
     \dots \; = -\frac{1}{2}(\gamma + q)_1^\intercal Q_1^{-1} (\gamma + q)_1 - \mu^\intercal b + (E^\intercal\mu - \gamma)^\intercal l + \lambda_u^\intercal(l-u) = \dots \\
     \dots \; = -\frac{1}{2}(\gamma + q)_1^\intercal Q_1^{-1} (\gamma + q)_1 - \mu^\intercal b - (\gamma + q)^\intercal l + (E^\intercal\mu + q)^\intercal l + \lambda_u^\intercal(l-u)
     \end{gather*}
 Note that
-    \begin{gather*} 
+    \begin{gather*}
     Q \Bar{x} + \gamma + q = 0 \quad \iff \quad \gamma_0 + q_0 = 0 \; \And \; Q_1 \Bar{x}_1 + \gamma_1 + q_1 = 0
     \end{gather*}
 \subsubsection*{Toward a possible constrained program}
@@ -141,7 +141,7 @@ With the substitution $\Tilde{\gamma} = \gamma + q$, our objective function is w
     \textrm{where} \quad L(\Tilde{\gamma}, \mu, \lambda_u) = -\frac{1}{2} \Tilde{\gamma}_1^\intercal Q_1^{-1}\Tilde{\gamma}_1 - \mu^\intercal b - \Tilde{\gamma}^\intercal l + (E^\intercal\mu + q)^\intercal l + \lambda_u^\intercal(l-u)
     \end{gather*}
 \subsubsection*{Duality in action}
-In the last formula for the Lagrangian, the last term $\lambda_u^\intercal(l-u)$, since we are looking for the maximum, we know that $l-u .\ge 0$ and we have the constraint $\lambda_u .\ge \max.(0, \Tilde{\gamma} - q - E^\intercal\mu)$, can be restricted to an equality, leading to 
+In the last formula for the Lagrangian, the last term $\lambda_u^\intercal(l-u)$, since we are looking for the maximum, we know that $l-u .\ge 0$ and we have the constraint $\lambda_u .\ge \max.(0, \Tilde{\gamma} - q - E^\intercal\mu)$, can be restricted to an equality, leading to
 \begin{gather*}
     \max_{\Tilde{\gamma}, \mu, \lambda_u} L(\Tilde{\gamma}, \mu, \lambda_u) = \max_{\Tilde{\gamma}, \mu} L(\tilde{\gamma}, \mu)  \quad \textrm{where} \\
     L(\tilde{\gamma}, \mu) = -\frac{1}{2} \Tilde{\gamma}_1^\intercal Q_1^{-1}\Tilde{\gamma}_1 - \mu^\intercal b - \Tilde{\gamma}^\intercal l + (E^\intercal\mu + q)^\intercal l + \max.(0, \Tilde{\gamma} - q - E^\intercal\mu)^\intercal(l-u) = \dots \\
@@ -160,7 +160,7 @@ The optimality conditions can be expressed in terms of the supergradient: we den
 \[
     Q p + \Tilde{\gamma} = 0 \quad \And \quad E p - b = 0
 \]
-are met, we obtain 
+are met, we obtain
 \[
 L = -\mu^\intercal b + \frac{1}{2}p^\intercal Q p + (E^\intercal\mu + q)^\intercal p = \frac{1}{2}p^\intercal Q p + q^\intercal p
 \]
@@ -180,7 +180,7 @@ Since the problem is separable, $Q$ is diagonal, it is easy to divide the subspa
 \end{gather*}
 so that
 \begin{gather*}
-    \Bar{x} \in \arg \min_x L(x, \nu) \And L(\Bar{x}, \nu) > -\infty \implies Q_1 \Bar{x}_1 + q_1 + E_1\mu + \lambda_{u1} - \lambda_{l1} = 0 \\ 
+    \Bar{x} \in \arg \min_x L(x, \nu) \And L(\Bar{x}, \nu) > -\infty \implies Q_1 \Bar{x}_1 + q_1 + E_1\mu + \lambda_{u1} - \lambda_{l1} = 0 \\
     \qquad \textrm{and} \qquad q_0 + E_0^\intercal\mu + \lambda_{u0} - \lambda_{l0} = 0
 \end{gather*}
 The first equation gives us
@@ -203,7 +203,31 @@ With such substitutions, and keeping track of the consequently transformed inequ
 
 
 \begin{gather*}
-L(\nu) = L_0 + L_1(\nu) + 
+L(\nu) = L_0 + L_1(\nu) +
 \end{gather*}
 Introducing the variables $\Delta \lambda = \lambda_u - \lambda_l$ and $\gamma = \Delta\lambda_1 + E_1^\intercal\mu$ we can write for the Lagrangian
+
+\section*{Toward algorithms}
+\subsection*{Smoothing}
+$O(\sqrt{\frac{L}{\epsilon}})$
+We can choose $L = O(\frac{1}{\epsilon})$, so attaining
+$O(\frac{1}{\epsilon})$
+\subsection*{Parameter Search}
+From the first runs of the algorithms, it was evident that parameter tuning was
+crucial for (deflected) subgradient algorithms.
+A first tentative approach to parameter search could be
+to implement automatic program differentiation and use then an hyper-algorithm,
+automatically updating the parameters along the gradient (leading to a lower
+target value). We still have to takle the implementation of such an idea.
+A second approach could be to use a 0th order method, like the Nelder Mead simplex
+algorithm, applied progressively to small run with different parameters;
+the search is to be repeated during the execution of the main algorithm since the
+convergence dynamics usually reveal variable optimal parameter
+\subsubsection*{Experimental Results}
+\subsubsubsection*{Nesterov Momentum}
+\subsubsubsection*{AdaGrad (diagonal)}
+\subsubsubsection*{RMSProp}
+\subsubsubsection*{}
+
+
 \end{document}

@@ -1,25 +1,37 @@
 module Subgradient
 
 using LinearAlgebra
+using Parameters
 using ..Optimization
 using ..Optimization.Utils
 
+import ..Optimization.set_param!
 import ..Optimization.Descent: init!, step!
 export  SubgradientMethod,
     DualSubgradientMethod,
     DeflectedSubgradientMethod,
     init!,
-    step!
+    step!,
+    set_param!
 
 # Subgradient methods
-abstract type SubgradientMethod end
+abstract type SubgradientMethod <: LocalizationMethod end
 
-mutable struct WithStopCriterion{M} <: SubgradientMethod where M <: SubgradientMethod
-    method::M
-    R               # (estimate) upper bound on the size of the region
+mutable struct WithStopCriterion{SM <: SubgradientMethod} <: SubgradientMethod
+    method::SM
+    R::AbstractFloat    # (estimate) upper bound on the size of the region
 
-    l               # lower bound on the objective function
-    l′              # best lower bound
+    l                   # lower bound on the objective function
+    l′                  # best lower bound
+    params
+    WithStopCriterion(method; R=Inf) = begin
+        M = new{WithStopCriterion{SM}}(method, R)
+        M.params = method.params
+        M
+    end
+end
+function set_param!(M::WithStopCriterion{<:SubgradientMethod}, s::Symbol, v)
+    setfield!(M.method, s, v)
 end
 function init!(M::WithStopCriterion{<:SubgradientMethod}, f, ∂f, x)
     M.l′ = -Inf
@@ -37,6 +49,14 @@ end
 
 struct FixedStepSize <: SubgradientMethod
     α
+
+    params
+    FixedStepSize(α=nothing) = begin
+        M = new()
+        @some M.α = α
+        M.params = Dict(:α => [0.0, Inf])
+        M
+    end
 end
 """
 Guarantee
@@ -52,20 +72,35 @@ function step!(M::FixedStepSize, f, ∂f, x)
 end
 
 mutable struct NoMemoryStepSize <: SubgradientMethod
-    i
     gen_α
+    α_mul   # redundant factor to be used in parameter search
+
+    i
+    params
+    NoMemoryStepSize(gen_α; α_mul=1.0) = begin
+        M = new(gen_α, α_mul)
+        M.params = Dict(:α_mul => [0.0, Inf])
+        M
+    end
 end
 function init!(M::NoMemoryStepSize, f, ∂f, x)
     i=0
 end
 function step!(M::NoMemoryStepSize, f, ∂f, x)
     sg = ∂f(x)
-    α = gen_α(M.i+=1, f, ∂f, x, sg)
+    α = M.α_mul*M.gen_α(M.i+=1, f, ∂f, x, sg)
     return (x - α*sg, α, sg)
 end
 
 struct FixedStepLength <: SubgradientMethod
     γ
+
+    params
+    FixedStepLength(γ) = begin
+        M = new(γ)
+        M.params = Dict(:γ => [0.0, Inf])
+        M
+    end
 end
 init!(M::FixedStepLength, f, ∂f, x) = M
 function step!(M::FixedStepLength, f, ∂f, x)
@@ -73,9 +108,18 @@ function step!(M::FixedStepLength, f, ∂f, x)
     γ/norm(sg) |>
         α -> (x - α*sg, α, sg)
 end
+
 mutable struct NoMemoryStepLength <: SubgradientMethod
-    i
     gen_γ
+    γ_mul       # redundant factor to be used in parameter search
+
+    i
+    params
+    NoMemoryStepLength(gen_γ; γ_mul=1.0) = begin
+        M = new(gen_γ, γ_mul)
+        M.params = Dict(:γ_mul => [0.0, 1.0])
+        M
+    end
 end
 function init!(M::NoMemoryStepLength, f, ∂f, x)
     i=0
@@ -90,14 +134,17 @@ end
 mutable struct PolyakStepSize <: SubgradientMethod
     f_opt       # optimum objective value if available
     gen_γ       # estimated error in objective
+    γ_mul       # redundant factor to be used in parameter search
 
     i           # iteration counter, needed for γ
     f_best      # useful when f_opt should be estimated
     gen_α       # Polyak step size generator
-    PolyakStepSize(;f_opt=nothing, gen_γ=nothing) = begin
+    params
+    PolyakStepSize(;f_opt=nothing, gen_γ=nothing, γ_mul=1.0) = begin
         M = new()
         @some M.f_opt = f_opt
         @some M.gen_γ = gen_γ
+        M.γ_mul = γ_mul
 
         if f_opt !== nothing
             M.gen_α = (f, ∂f) -> (f-M.f_opt) / (∂f'∂f)
@@ -108,6 +155,7 @@ mutable struct PolyakStepSize <: SubgradientMethod
                 γ -> (f-M.f_best+γ) / (∂f'∂f))
             end
         end
+        M.params = Dict(:γ_mul => [0.0, 1.0])
         M
     end
 end
@@ -149,17 +197,19 @@ abstract type DualSubgradientMethod <: SubgradientMethod end
 mutable struct HarmonicErgodicPrimalStep <: DualSubgradientMethod
     k       # exponent, 4 seems nice
     a       # a in α = 1.0 / (a + bt)
-    b       # ^
+    b       # b in ^
 
     x̅      # primal convex combination
     t      # iteration counter
     Sₜ     # ∑ᵗ⁻¹ (l+1)ᵏ
     Sₜ₋₁   # ∑ᵗ⁻¹ lᵏ
+    params
     HarmonicErgodicPrimalStep(; k=0, a=nothing, b=nothing) = begin
         M = new()
         M.k = k
         @some M.a = a
         @some M.b = b
+        M.params = Dict(:k => [0, 10], :a => [0.0, Inf], :b => [0.0, Inf])
         M
     end
 end
@@ -187,6 +237,7 @@ end
 abstract type DeflectedSubgradientMethod <: SubgradientMethod end
 mutable struct PolyakEllipStepSize <: DeflectedSubgradientMethod
     gen_γ
+    γ_mul       # redundant factor to be used in parameter search
     ϵ
 
     i
@@ -194,7 +245,8 @@ mutable struct PolyakEllipStepSize <: DeflectedSubgradientMethod
     g
     f_best
     f_opt
-    PolyakEllipStepSize(;f_opt=nothing, gen_γ=nothing, ϵ=1e-14) = begin
+    params
+    PolyakEllipStepSize(;f_opt=nothing, gen_γ=nothing, ϵ=1e-14, γ_mul=1.0) = begin
         M = new()
         M.ϵ = ϵ
         @some M.gen_γ = gen_γ
@@ -203,6 +255,7 @@ mutable struct PolyakEllipStepSize <: DeflectedSubgradientMethod
         else
             M.f_opt = () -> M.f_best - M.gen_γ(M.i+=1)
         end
+        M.params = Dict(:γ_mul => [0.0, Inf])
         M
     end
 end
@@ -241,12 +294,14 @@ mutable struct FilteredPolyakStepSize <: DeflectedSubgradientMethod
     β           # β ∈ [0, 1] memory
     f_opt       # optimum objective value if available
     gen_γ       # estimated error in objective
+    γ_mul       # redundant factor for parameter search
 
     i           # iteration counter, needed for γ
     f_best      # useful when f_opt should be estimated
     gen_α       # Filtered Polyak step size generator
     s           # filtered subgradient
-    FilteredPolyakStepSize(; f_opt=nothing, gen_γ=nothing, β=nothing) = begin
+    params
+    FilteredPolyakStepSize(; f_opt=nothing, gen_γ=nothing, β=nothing, γ_mul=1.0) = begin
         M = new()
         @some M.f_opt = f_opt
         @some M.gen_γ = gen_γ
@@ -261,6 +316,7 @@ mutable struct FilteredPolyakStepSize <: DeflectedSubgradientMethod
                 γ -> (f-M.f_best+γ) / (s's))
             end
         end
+        M.params = Dict(:γ_mul => [0.0, Inf], :β => [0.0, 1.0])
         M
     end
 end
@@ -278,7 +334,7 @@ function step!(M::FilteredPolyakStepSize, f, ∂f, x)
     (x-α*s, α, s)
 end
 
-# Camerini, Fratta, Maffioli
+# TODO Camerini, Fratta, Maffioli
 mutable struct CFMStepSize <: DeflectedSubgradientMethod
     get_γ   # γ ∈ [0, 2] - suggested value 1.5
 
@@ -294,10 +350,12 @@ mutable struct Adagrad <: DeflectedSubgradientMethod
     ϵ # small value, typical 1e-8
 
     s # sum of squared gradient
+    params
     Adagrad(;α=nothing, ϵ=1e-14) = begin
         M = new()
         @some M.α = α
         M.ϵ = ϵ
+        M.params = Dict(:α => [0.0, 1.0])
         M
     end
 end
@@ -318,6 +376,7 @@ mutable struct AdagradFull <: DeflectedSubgradientMethod
     ϵ   # small value
 
     G   # ∑ggᵀ
+    params
 end
 function init!(M::AdagradFull, f, ∂f, x)
 
@@ -331,10 +390,12 @@ mutable struct NesterovMomentum <: DeflectedSubgradientMethod
     β # momentum decay
 
     v # momentum
+    params
     NesterovMomentum(;α=nothing, β=nothing) = begin
         M = new()
         @some M.α = α
         @some M.β = β
+        M.params = Dict(:α => [0.0, 1.0], :β => [0.0, 1.0])
         M
     end
 end
@@ -354,11 +415,13 @@ mutable struct RMSProp <: DeflectedSubgradientMethod
     ϵ # small value
 
     s # sum of squared gradient
+    params
     RMSProp(; α=nothing, γ=nothing, ϵ=1e-14) = begin
         M = new()
         @some M.α = α
         @some M.γ = γ
         M.ϵ = ϵ
+        M.params = Dict(:α => [0.0, 1.0], :γ => [0.0, 1.0])
         M
     end
 end
@@ -380,11 +443,13 @@ mutable struct Adadelta <: DeflectedSubgradientMethod
 
     s # sum of squared gradients
     u # sum od squared gradients
+    params
     AdadeltaDescent(;γs=nothing, γx=nothing, ϵ=1e-14) = begin
         M = new()
         @some M.γs = γs
         @some M.γx = γx
         M.ϵ = ϵ
+        M.params = Dict(:γs => [0.0, 1.0], :γx => [0.0, 1.0])
         M
     end
 end
@@ -410,12 +475,14 @@ mutable struct Adam <: DeflectedSubgradientMethod
     k # step counter
     v # 1st moment estimate
     s # 2nd moment estimate
+    params
     AdamDescent(;α=nothing, γv=nothing, γs=nothing, ϵ=1e-14) = begin
         M = new()
         @some M.α = α
         @some M.γv = γv
         @some M.γs = γs
         M.ϵ = ϵ
+        M.params = Dict(:α => [0.0, 1.0], :γv => [0.0, 1.0], :γs => [0.0, 1.0])
         M
     end
 end
@@ -442,10 +509,12 @@ mutable struct HyperGradient <: DeflectedSubgradientMethod
 
     α # current learning rate
     g_prev # previous gradient
+    params
     HyperGradient(; α₀=nothing, μ=nothing) = begin
         M = new()
         @some M.α₀ = α₀
         @some M.μ = μ
+        M.params = Dict(:α₀ => [0.0, 1.0], :μ => [0.0, 1.0])
         M
     end
 end
@@ -469,11 +538,13 @@ mutable struct HyperNesterovMomentum <: DeflectedSubgradientMethod
     v # momentum
     α # current learning rate
     g_prev # previous gradient
+    params
     HyperNesterovMomentum(;α₀=nothing, μ=nothing, β=nothing) = begin
         M = new()
         @some M.α₀ = α₀
         @some M.μ = μ
         @some M.β = β
+        M.params = Dict(:α₀ => [0.0, 1.0], :μ => [0.0, 1.0], :β => [0.0, 1.0])
         M
     end
 end
@@ -498,10 +569,12 @@ mutable struct Noisy <: DeflectedSubgradientMethod
     σ
 
     k
+    params
     Noisy(;submethod=nothing, σ=nothing) = begin
         M = new()
         @some M.submethod = submethod
         @some M.σ = σ
+        M.params = Dict(:σ => [0.0, Inf])
         M
     end
 end

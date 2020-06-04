@@ -1,6 +1,6 @@
 # ------------------------- Subgradient Methods ------------------------- #
 mutable struct QMCFBPAlgorithmD1SG <: OptimizationAlgorithm{QMCFBProblem}
-    subgradient::SubgradientMethod
+    localization::SubgradientMethod
     verba               # verbosity utility
     max_iter            # max number of iterations
     ε
@@ -9,7 +9,7 @@ mutable struct QMCFBPAlgorithmD1SG <: OptimizationAlgorithm{QMCFBProblem}
 
     memorabilia # set of the name of variables that can be recorded during execution
     QMCFBPAlgorithmD1SG(;
-        subgradient=nothing,
+        localization=nothing,
         verbosity=nothing,
         my_verba=nothing,
         max_iter=nothing,
@@ -35,7 +35,7 @@ mutable struct QMCFBPAlgorithmD1SG <: OptimizationAlgorithm{QMCFBProblem}
 
         set!(
             algorithm,
-            subgradient=subgradient,
+            localization=localization,
             verbosity=verbosity,
             my_verba=my_verba,
             max_iter=max_iter,
@@ -45,7 +45,7 @@ mutable struct QMCFBPAlgorithmD1SG <: OptimizationAlgorithm{QMCFBProblem}
     end
 end
 function set!(algorithm::QMCFBPAlgorithmD1SG;
-    subgradient=nothing,
+    localization=nothing,
     verbosity=nothing,
     my_verba=nothing,
     max_iter=nothing,
@@ -53,7 +53,7 @@ function set!(algorithm::QMCFBPAlgorithmD1SG;
     ϵ=nothing,
     μ₀=nothing)
 
-    @some algorithm.subgradient=subgradient
+    @some algorithm.localization=localization
     if verbosity !== nothing
         algorithm.verba = ((level, message) -> verba(verbosity, level, message))
     end
@@ -63,6 +63,12 @@ function set!(algorithm::QMCFBPAlgorithmD1SG;
     @some algorithm.ϵ=ϵ
     algorithm.μ₀=μ₀
 
+    algorithm
+end
+function set!(algorithm::QMCFBPAlgorithmD1SG,
+    result::OptimizationResult{QMCFBProblem})
+
+    algorithm.μ₀ = result["μ"]  # Try also with μ′
     algorithm
 end
 function run!(
@@ -79,7 +85,7 @@ function run!(
     Q╲, Q̂╲ = view╲.([Q, Q̂])
     Q̂╲[:] = 1.0 ./ Q╲
 
-    @unpack subgradient, verba, max_iter, ε, ϵ, μ₀ = algorithm
+    @unpack localization, verba, max_iter, ε, ϵ, μ₀ = algorithm
     if μ₀ === nothing
         μ₀ = zeros(eltype(Q), m)
     end
@@ -133,19 +139,19 @@ function run!(
         # best solution up to now
         x′, μ′, L′, ∂L′ = copy(x), copy(μ), -Inf, copy(∂L)
 
-        wrapper = (func!, subgradient, x, μ, f_μ, f_xμ, ∂f_μ, ∂f_xμ) -> begin
-            if typeof(subgradient) <: DualSubgradientMethod
-                func!(subgradient, x, zeros(Bool, length(μ)), f_xμ, ∂f_xμ, μ)
+        wrapper = (func!, localization, x, μ, f_μ, f_xμ, ∂f_μ, ∂f_xμ) -> begin
+            if typeof(localization) <: DualSubgradientMethod
+                func!(localization, x, zeros(Bool, length(μ)), f_xμ, ∂f_xμ, μ)
             else
-                func!(subgradient, f_μ, ∂f_μ, μ)
+                func!(localization, f_μ, ∂f_μ, μ)
             end
         end
-        get_x̅ = (typeof(subgradient) <: DualSubgradientMethod) ?
-            () -> subgradient.x̅ :
+        get_x̅ = (typeof(localization) <: DualSubgradientMethod) ?
+            () -> localization.x̅ :
             () -> nothing
 
         wrapper(init!,
-            subgradient,
+            localization,
             μ -> get_an_x(μ),
             μ,
             μ -> -get_L(μ),
@@ -156,7 +162,7 @@ function run!(
             # TODO: develop stopping criteria
             (μ_t, α, sg) =
                 wrapper(step!,
-                    subgradient,
+                    localization,
                     μ -> get_an_x(μ),
                     μ,
                     μ -> -get_L(μ),
@@ -164,7 +170,7 @@ function run!(
                     μ -> -get_a_∂L(μ),
                     (x, μ) -> get_∂L(x, μ))
 
-            #step!(subgradient, μ->-get_L(μ), μ->-get_a_∂L(μ), μ)
+            #step!(localization, μ->-get_L(μ), μ->-get_a_∂L(μ), μ)
             @memento μ[:] = μ_t
             @memento x[:] = get_an_x(μ)
             @memento L = get_L(x, μ)
@@ -193,8 +199,8 @@ end
 **Example**
 ```julia
 using Optimization
-subgradient = Subgradient.FixedStepSize(0.1)
-algorithm = QMCFBPAlgorithmD1SG(subgradient=subgradient, verbosity=0, max_iter=1000, ϵ=1e-8, ε=1e-8)
+localization = Subgradient.FixedStepSize(0.1)
+algorithm = QMCFBPAlgorithmD1SG(localization=localization, verbosity=0, max_iter=1000, ϵ=1e-8, ε=1e-8)
 test = get_test(algorithm, m=10, n=20)
 𝔓 = test.problem
 Q, q, l, u, E, b = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b)
@@ -202,6 +208,6 @@ algorithm.μ₀ = zeros(eltype(Q), size(E, 1))
 test.solver.options.memoranda = Set(["norm∂L"])
 run!(test)
 
-using Optimization; subgradient = Subgradient.FixedStepSize(0.1); algorithm = QMCFBPAlgorithmD1SG(subgradient=subgradient, verbosity=0, max_iter=1000, ϵ=1e-8, ε=1e-8); test = get_test(algorithm, m=10, n=20); 𝔓 = test.problem; Q, q, l, u, E, b = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b); algorithm.μ₀ = zeros(eltype(Q), size(E, 1)); test.solver.options.memoranda = Set(["norm∂L"]);
+using Optimization; localization = Subgradient.FixedStepSize(0.1); algorithm = QMCFBPAlgorithmD1SG(localization=localization, verbosity=0, max_iter=1000, ϵ=1e-8, ε=1e-8); test = get_test(algorithm, m=10, n=20); 𝔓 = test.problem; Q, q, l, u, E, b = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b); algorithm.μ₀ = zeros(eltype(Q), size(E, 1)); test.solver.options.memoranda = Set(["norm∂L"]);
 ```
 """

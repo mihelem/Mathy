@@ -7,7 +7,7 @@ WIP
 * implement REAL projected gradient (the present one is not a real projection...)
 """
 mutable struct QMCFBPAlgorithmD2D <: OptimizationAlgorithm{QMCFBProblem}
-    descent::DescentMethod
+    localization::DescentMethod
     verba               # verbosity utility
     max_iter            # max number of iterations
     ϵₘ                  # error within which an element is considered 0

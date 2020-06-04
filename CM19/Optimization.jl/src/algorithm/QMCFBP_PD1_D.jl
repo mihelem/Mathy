@@ -1,7 +1,7 @@
 # TODO: any exact "descent" (not really, it's a saddle point) method
 # --------------------- Primal Dual algorithm PD1 ------------------------- #
 mutable struct QMCFBPAlgorithmPD1 <: OptimizationAlgorithm{QMCFBProblem}
-    descent::DescentMethod
+    localization::DescentMethod
     verba       # verbosity utility
     max_iter    # max number of iterations
     ϵ₀          # error within which a point is on a boundary
@@ -10,7 +10,7 @@ mutable struct QMCFBPAlgorithmPD1 <: OptimizationAlgorithm{QMCFBProblem}
 
     memorabilia # set of the name of variables that can be recorded during execution
     QMCFBPAlgorithmPD1(;
-        descent=nothing,
+        localization=nothing,
         verbosity=nothing,
         my_verba=nothing,
         max_iter=nothing,
@@ -22,7 +22,7 @@ mutable struct QMCFBPAlgorithmPD1 <: OptimizationAlgorithm{QMCFBProblem}
         algorithm.memorabilia = Set(["objective", "Π∇L", "∇L", "p", "normΠ∇L", "normΠ∇L_μ"])
 
         set!(algorithm,
-            descent=descent,
+            localization=localization,
             verbosity=verbosity,
             my_verba=my_verba,
             max_iter=max_iter,
@@ -37,7 +37,7 @@ end
 # to each variable in the mathematical domain we can have many different
 # names in the program
 function set!(algorithm::QMCFBPAlgorithmPD1;
-    descent=nothing,
+    localization=nothing,
     verbosity=nothing,
     my_verba=nothing,
     max_iter=nothing,
@@ -45,7 +45,7 @@ function set!(algorithm::QMCFBPAlgorithmPD1;
     ε=nothing,
     p₀=nothing)
 
-    @some algorithm.descent=descent
+    @some algorithm.localization=localization
     if verbosity !== nothing
         algorithm.verba = ((level, message) -> verba(verbosity, level, message))
     end
@@ -54,6 +54,12 @@ function set!(algorithm::QMCFBPAlgorithmPD1;
     @some algorithm.ϵ₀=ϵ₀
     @some algorithm.ε=ε
     algorithm.p₀=p₀
+end
+function set!(algorithm::QMCFBPAlgorithmPD1,
+    result::OptimizationResult{QMCFBProblem})
+
+    algorithm.p₀ = result["p"]  # Try also with μ′
+    algorithm
 end
 function run!(algorithm::QMCFBPAlgorithmPD1, 𝔓::QMCFBProblem; memoranda=Set([]))
     @unpack Q, q, l, u, E, b = 𝔓
@@ -82,7 +88,7 @@ function run!(algorithm::QMCFBPAlgorithmPD1, 𝔓::QMCFBProblem; memoranda=Set([
     get_∇L = p -> (x=get_x(p); μ=get_μ(p); [Q*x+q+E'μ; -E*x+b])
     get_Π∇L = p -> Π∇!(p, get_∇L(p))
 
-    init!(descent, nothing, get_Π∇L, p)
+    init!(localization, nothing, get_Π∇L, p)
     @memento Π∇L = get_Π∇L(p)
     for i=1:max_iter
         @memento normΠ∇L = norm(Π∇L, Inf)

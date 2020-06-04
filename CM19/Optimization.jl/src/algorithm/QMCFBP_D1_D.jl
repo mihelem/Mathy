@@ -13,7 +13,7 @@ regions identified by edges of discontinuity of the derivative
 
 """
 mutable struct QMCFBPAlgorithmD1D <: OptimizationAlgorithm{QMCFBProblem}
-    descent::DescentMethod
+    localization::DescentMethod
     verba               # verbosity utility
     max_iter            # max number of iterations
     ϵₘ                  # error within which an element is considered 0
@@ -24,7 +24,7 @@ mutable struct QMCFBPAlgorithmD1D <: OptimizationAlgorithm{QMCFBProblem}
 
     memorabilia # set of the name of variables that can be recorded during execution
     QMCFBPAlgorithmD1D(;
-        descent=nothing,
+        localization=nothing,
         verbosity=nothing,
         my_verba=nothing,
         max_iter=nothing,
@@ -38,7 +38,7 @@ mutable struct QMCFBPAlgorithmD1D <: OptimizationAlgorithm{QMCFBProblem}
         algorithm.memorabilia = Set(["L", "∂L", "norm∂L", "x", "μ", "α", "λ"])
 
         set!(algorithm,
-            descent=descent,
+            localization=localization,
             verbosity=verbosity,
             my_verba=my_verba,
             max_iter=max_iter,
@@ -51,7 +51,7 @@ mutable struct QMCFBPAlgorithmD1D <: OptimizationAlgorithm{QMCFBProblem}
 
 end
 function set!(algorithm::QMCFBPAlgorithmD1D;
-    descent=nothing,
+    localization=nothing,
     verbosity=nothing,
     my_verba=nothing,
     max_iter=nothing,
@@ -61,7 +61,7 @@ function set!(algorithm::QMCFBPAlgorithmD1D;
     cure_singularity=nothing,
     plot_steps=0)
 
-    @some algorithm.descent=descent
+    @some algorithm.localization=localization
     if verbosity !== nothing
         algorithm.verba = ((level, message) -> verba(verbosity, level, message))
     end
@@ -73,6 +73,12 @@ function set!(algorithm::QMCFBPAlgorithmD1D;
     @some algorithm.cure_singularity = cure_singularity
     algorithm.plot_steps = plot_steps
 
+    algorithm
+end
+function set!(algorithm::QMCFBPAlgorithmD1D,
+    result::OptimizationResult{QMCFBProblem})
+
+    algorithm.μ₀ = result["μ"]
     algorithm
 end
 struct Oᾱ <: Base.Order.Ordering
@@ -111,7 +117,7 @@ lt(o::Oᾱ,
 end
 function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([]))
     @unpack Q, q, l, u, E, b, reduced = 𝔓
-    @unpack descent, verba, max_iter, ϵₘ, ε, μ₀, cure_singularity, plot_steps = algorithm
+    @unpack localization, verba, max_iter, ϵₘ, ε, μ₀, cure_singularity, plot_steps = algorithm
     @init_memoria memoranda
 
     Q╲ = view(Q, [CartesianIndex(i, i) for i in 1:size(Q, 1)])
@@ -189,9 +195,6 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         # argmin || E[:, 𝔫]*x[𝔫] + E[:, .~𝔫]*x[.~𝔫] - b ||
         # ≡ argmin || E₁*x₁ + E₀*x₀ - b ||
         # ≡ argmin ½x₁'E₁'E₁x₁ + (E₀*x₀-b)'E₁*x₁
-        # println("Solve NaN: Q : $(E[:, nanny]'E[:, nanny])")
-        # println("Solve NaN: q : $(E[:, nanny]'*(E[:, .~nanny]*x[.~nanny]-b))")
-        # println("Solve NaN: x : $(x[.~nanny])")
         𝔓₁ = MinQuadratic.MQBProblem(
             E[:, nanny]'E[:, nanny],
             E[:, nanny]'*(E[:, .~nanny]*x[.~nanny]-b),
@@ -199,7 +202,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             u[nanny])
         instance = OptimizationInstance{MinQuadratic.MQBProblem}()
         algorithm = MinQuadratic.MQBPAlgorithmPG1(
-            descent=MinQuadratic.QuadraticBoxPCGDescent(),
+            localization=MinQuadratic.QuadraticBoxPCGDescent(),
             verbosity=-1,
             max_iter=1000,      # TODO: set properly
             ε=ε/n,              # TODO: set properly
@@ -226,7 +229,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
 
         # x̃₀[kerny] set to 0 so that it is easier to set in locate_primal_null_∂
         x̃₀ = (Qx̃₀ ./ Q╲) |> x̃ -> (x̃[kerny] .= 0.0; x̃)
-        # the next one is costly but stablier than summing each Δ at each ᾱ
+        # the next one is costly but stabler than summing each Δ at each ᾱ
         get_dᵀ∇L₀ = () -> Eᵀd'*(𝔏.*l + 𝕴.*x̃₀ + 𝔘.*u) - bᵀd
         get_α_frac = () -> [get_dᵀ∇L₀(), Eᵀd[𝕴]'*(Eᵀd[𝕴]./Q╲[𝕴])]
 
@@ -242,7 +245,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             next_ᾱ, next_outward, next_p = peek(pq)[2];
             # verba(1, "\nnext_ᾱ = $next_ᾱ")
             if filter_ᾱ(next_p, next_outward, 𝔅) == false
-                println("ATTENZIONE: filtrato ᾱ")
+                println("WARNING: filtered an ᾱ")
                 dequeue!(pq)
                 continue
             end
@@ -269,7 +272,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             ᾱ, outward, p = next_ᾱ, next_outward, next_p
             i, lu = p[1], p[2]
             if i*lu == 0
-                println("Attenzione, raggiunto ∞")
+                println("WARNING: line search reached ∞")
                 error()
             end
             𝔅[i, [2, [1, 3][lu]]] = [!outward, outward]

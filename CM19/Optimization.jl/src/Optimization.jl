@@ -51,6 +51,7 @@ contains:
 module Optimization
 
 using LinearAlgebra
+using Parameters
 import Plots
 
 include("utils.jl")
@@ -62,6 +63,8 @@ export  OptimizationInstance,
         OptimizationSolver,
         OptimizationSolverOptions,
         OptimizationResult,
+        LocalizationMethod,
+        set_param!,
         plot!,
         plot
 
@@ -269,6 +272,11 @@ function set!(
     instance
 end
 
+abstract type LocalizationMethod end
+function set_param!(M::LocalizationMethod, s::Symbol, v)
+    setfield!(M, s, v)
+end
+
 include("linesearch.jl")
 using .LineSearch
 export  bracket_minimum,
@@ -279,9 +287,12 @@ export  bracket_minimum,
 
 include("descent.jl")
 using .Descent
-export  DescentMethod,
+export  ZerothOrder,
+        NelderMead,
+        DescentMethod,
         init!,
         step!,
+        set_param!,
         GradientDescent,
         ConjugateGradientDescent,
         MomentumDescent,
@@ -301,7 +312,8 @@ export  Subgradient,
         DualSubgradientMethod,
         DeflectedSubgradientMethod,
         init!,
-        step!
+        step!,
+        set_param!
 
 include("minquadratic.jl")
 using .MinQuadratic
@@ -346,6 +358,12 @@ export  bidiagonal_decomposition_handmade2,
         gaussian_elimination,
         hessenberg_gram_schmidt,
         QR_gram_schmidt
+
+include("hyper.jl")
+using .Hyper
+export WithParameterSearch,
+    set!,
+    run!
 
 
 """

@@ -2,7 +2,7 @@
 # signature different from the other DescentMethod s
 mutable struct QuadraticBoxPCGDescent <: DescentMethod end
 mutable struct MQBPAlgorithmPG1 <: OptimizationAlgorithm{MQBProblem}
-    descent::DescentMethod      #
+    localization::DescentMethod      #
     verba                       # verbosity utility
     max_iter                    #
     ε                           # required: norm(∇f, ?) < ε
@@ -11,7 +11,7 @@ mutable struct MQBPAlgorithmPG1 <: OptimizationAlgorithm{MQBProblem}
 
     memorabilia
     MQBPAlgorithmPG1(;
-        descent=nothing,
+        localization=nothing,
         verbosity=nothing,
         my_verba=nothing,
         max_iter=nothing,
@@ -25,7 +25,7 @@ mutable struct MQBPAlgorithmPG1 <: OptimizationAlgorithm{MQBProblem}
     end
 end
 function set!(algorithm::MQBPAlgorithmPG1;
-    descent=nothing,
+    localization=nothing,
     verbosity=nothing,
     my_verba=nothing,
     max_iter=nothing,
@@ -33,7 +33,7 @@ function set!(algorithm::MQBPAlgorithmPG1;
     ϵ₀=nothing,
     x₀=nothing)
 
-    @some algorithm.descent = descent
+    @some algorithm.localization = localization
     if verbosity !== nothing
         algorithm.verba = ((level, message) -> verba(verbosity, level, message))
     end
@@ -45,9 +45,15 @@ function set!(algorithm::MQBPAlgorithmPG1;
 
     algorithm
 end
+function set!(algorithm::MQBPAlgorithmPG1,
+    result::OptimizationResult{MQBProblem})
+
+    algorithm.x₀ = result["x"]  # Try also with μ′
+    algorithm
+end
 function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
     @unpack Q, q, l, u = 𝔓
-    @unpack descent, max_iter, verba, ε, ϵ₀, x₀ = algorithm
+    @unpack localization, max_iter, verba, ε, ϵ₀, x₀ = algorithm
     @init_memoria memoranda
 
     x = (x₀ === nothing) ? 0.5*(l+u) : x₀
@@ -180,9 +186,9 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
         return x
     end
 
-    function solve(descent, x, Q, q, l, u)
-        if typeof(descent) !== QuadraticBoxPCGDescent
-            init!(descent, x -> get_Πf(x, l, u), x -> get_Π∇f(x, Q, q, l, u), x)
+    function solve(localization, x, Q, q, l, u)
+        if typeof(localization) !== QuadraticBoxPCGDescent
+            init!(localization, x -> get_Πf(x, l, u), x -> get_Π∇f(x, Q, q, l, u), x)
         end
         x[:] = get_Πx(x, l, u)
         g = get_∇f(x, Q, q)
@@ -197,8 +203,8 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
                 break
             end
 
-            if typeof(descent) !== QuadraticBoxPCGDescent
-                @memento x[:] = get_Πx(step!(descent, x -> get_Πf(x, l, u), x -> get_Π∇f(x, Q, q, l, u), x), l, u)
+            if typeof(localization) !== QuadraticBoxPCGDescent
+                @memento x[:] = get_Πx(step!(localization, x -> get_Πf(x, l, u), x -> get_Π∇f(x, Q, q, l, u), x), l, u)
                 @memento Π∇f[:] = get_Π∇f(x, Q, q, l, u)
             else
                 @memento x[:] = get_Πx(step′(x, d, Q, q, l, u), l, u)
@@ -222,7 +228,7 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
         OptimizationResult{MQBProblem}(memoria=@get_memoria, result=result)
     end
 
-    solve(descent, x, Q, q, l, u)
+    solve(localization, x, Q, q, l, u)
     # x = local_search′(x, Q, q, l, u, max_iter, false)
     # result = @get_result x
     # OptimizationResult{MQBProblem}(memoria=@get_memoria, result=result)
