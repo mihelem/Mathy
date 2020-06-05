@@ -59,6 +59,32 @@ end
 function init!(M::NelderMead, f, S, y)
     M.S, M.y = S, y
 end
+# import Statistics: mean, std
+# function apply_by_kw(f, V::Array{Dict})
+#     array_dict_to_dict_array(V) |>
+#         da -> Dict([s=>f(v) for (s, v) in da])
+# end
+# function array_dict_to_dict_array(V::Array{Dict})
+#     if length(V) < 1
+#         return Dict()
+#     end
+#     res = Dict()
+#     for (s, r) in V[1]
+#         push!(res, s=>[])
+#     end
+#     for v in V
+#         for (s, r) in v
+#             push!(res[s], r)
+#         end
+#     end
+#     res
+# end
+# function mean(V::Array{Dict})
+#     apply_by_kw(mean, V)
+# end
+# function std(V::Array{Dictionary}; corrected::Bool)
+#     apply_by_kw(std, V)
+# end
 """
 **Pedices**
 * `l`, `h-1`, `h` : lowest, second-highest, highest
@@ -66,34 +92,8 @@ end
 * `e` : expansion
 * `t` : contraction
 """
-import Statistics: mean, std
-function apply_by_kw(f, V::Array{Dict})
-    array_dict_to_dict_array(V) |>
-        da -> Dict([s=>f(v) for (s, v) in da])
-end
-function array_dict_to_dict_array(V::Array{Dict})
-    if length(V) < 1
-        return Dict()
-    end
-    res = Dict()
-    for (s, r) in V[1]
-        push!(res, s=>[])
-    end
-    for v in V
-        for (s, r) in v
-            push!(res[s], r)
-        end
-    end
-    res
-end
-function mean(V::Array{Dict})
-    apply_by_kw(mean, V)
-end
-function std(V::Array{Dictionary}, corrected::Bool)
-    apply_by_kw(std, V)
-end
 function step!(M::NelderMead, f)
-    @unpack S, y, cmp = M
+    @unpack S, y, α, β, γ, cmp = M
 
     p = sortperm(y, lt=cmp)
     S[:] = S[p]
@@ -101,7 +101,7 @@ function step!(M::NelderMead, f)
     xₗ, xₕ₋₁, xₕ = S[1], S[end-1], S[end]
     yₗ, yₕ₋₁, yₕ = y[1], y[end-1], y[end]
     x̄ = mean(S[1:end-1])       # centroid
-    xᵣ = xₘ + α*(x̄ - xₕ)       # reflection point
+    xᵣ = x̄ + α*(x̄ - xₕ)       # reflection point
     yᵣ = f(xᵣ)
 
     if cmp(yᵣ, yₗ)
@@ -112,7 +112,7 @@ function step!(M::NelderMead, f)
         if !cmp(yₕ, yᵣ)
             xₕ, yₕ, S[end], y[end] = xᵣ, yᵣ, xᵣ, yᵣ
         end
-        xₜ = xₘ + γ*(xₕ - x̄)   # contraction point
+        xₜ = x̄ + γ*(xₕ - x̄)   # contraction point
         yₜ = f(xₜ)
         if cmp(yₕ, yₜ)               # shrinkage
             for i in 2:length(y)
@@ -138,7 +138,7 @@ function step!(M::NelderMead, f)
         end
         am
     end
-    amin(y, lt=cmp) |> i -> (S[i], y[i])
+    amin(y, cmp) |> i -> (S[i], y[i])
 end
 
 # First Order Methods

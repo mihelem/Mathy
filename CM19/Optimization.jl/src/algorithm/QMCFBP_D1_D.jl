@@ -78,7 +78,7 @@ end
 function set!(algorithm::QMCFBPAlgorithmD1D,
     result::OptimizationResult{QMCFBProblem})
 
-    algorithm.μ₀ = result["μ"]
+    algorithm.μ₀ = result.result["μ"]
     algorithm
 end
 struct Oᾱ <: Base.Order.Ordering

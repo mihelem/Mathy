@@ -9,13 +9,12 @@ module Hyper
 export WithParameterSearch,
     set!,
     run!
-    using Parameters
+using Parameters
 using ..Optimization
 using ..Optimization.Utils
 
 import ..Optimization: set!, run!
 
-# TODO: select appropriate type for the explorer
 mutable struct WithParameterSearch{P<:OptimizationProblem, A<:OptimizationAlgorithm{P}, S<:LocalizationMethod} <: OptimizationAlgorithm{P}
     algorithm::A
     searcher::S
@@ -90,17 +89,20 @@ function run!(
         algorithm
     end
 
-    params = Dict([(param, r[1]) for (param, r) in param_ranges])
-    push!(S, deepcopy(params))
-    for (s, r) in params
-        push!(S, deepcopy(params))
-        S[end][s] = param_ranges[s][2]
+    # params = Dict([(param, r[1]) for (param, r) in param_ranges])
+    params_k = [keys(param_ranges)...]
+    params_r = [values(param_ranges)...]
+    params_v = [r[1] for r in params_r]
+    push!(S, deepcopy(params_v))
+    for i in 1:length(params_v)
+        push!(S, deepcopy(params_v))
+        S[end][i] = params_r[i][2]
     end
 
     function gen_f(algorithm, iter)
-        function f(params)
+        function f(params_v′)
             algorithm′ = deepcopy(algorithm)
-            set_params!(algorithm′, params)
+            set_params!(algorithm′, Dict(zip(params_k, params_v′)))
             algorithm′.max_iter = iter
             # TODO: memoria
             # TODO: verbosity
@@ -117,11 +119,11 @@ function run!(
     for i in 1:n_searches
         f = gen_f(algorithm_best, algorithm_iter_per_search)
         init!(searcher, f, S)
-        params_best, result_best = searcher.S[1], searcher.y[1]
+        params_best, result_best = Dict(zip(params_k, searcher.S[1])), searcher.y[1]
         for j in 1:searcher_iter
             step!(searcher, f) |>
                 x -> begin
-                    @memento params_best = x[1]
+                    @memento params_best = Dict(zip(params_k, x[1]))
                     @memento result_best = x[2]
                 end
         end
@@ -129,13 +131,13 @@ function run!(
         set_params!(algorithm_best, params_best)
         set!(algorithm_best, result_best)
         algorithm_best.max_iter = iter_with_no_search
-        @memento result_best = run!(algorithm_best, 𝔓, memoranda)
+        @memento result_best = run!(algorithm_best, 𝔓, memoranda=memoranda)
         set!(algorithm_best, result_best)
     end
     hyper_result = @get_result params_best
     OptimizationResult{P}(
-        memoria=merge(best_result.memoria, @get_memoria),
-        result=merge(best_result.result, hyper_result))
+        memoria=merge(result_best.memoria, @get_memoria),
+        result=merge(result_best.result, hyper_result))
 end
 
 end # end module Hyper

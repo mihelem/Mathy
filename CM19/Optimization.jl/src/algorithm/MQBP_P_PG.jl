@@ -48,7 +48,7 @@ end
 function set!(algorithm::MQBPAlgorithmPG1,
     result::OptimizationResult{MQBProblem})
 
-    algorithm.x₀ = result["x"]  # Try also with μ′
+    algorithm.x₀ = result.result["x"]  # Try also with μ′
     algorithm
 end
 function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))

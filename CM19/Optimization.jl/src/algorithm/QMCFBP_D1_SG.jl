@@ -68,7 +68,7 @@ end
 function set!(algorithm::QMCFBPAlgorithmD1SG,
     result::OptimizationResult{QMCFBProblem})
 
-    algorithm.μ₀ = result["μ"]  # Try also with μ′
+    algorithm.μ₀ = result.result["μ′"]  # Try also with μ′
     algorithm
 end
 function run!(

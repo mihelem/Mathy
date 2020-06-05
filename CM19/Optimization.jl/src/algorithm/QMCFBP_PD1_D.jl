@@ -58,7 +58,7 @@ end
 function set!(algorithm::QMCFBPAlgorithmPD1,
     result::OptimizationResult{QMCFBProblem})
 
-    algorithm.p₀ = result["p"]  # Try also with μ′
+    algorithm.p₀ = result.result["p"]  # Try also with μ′
     algorithm
 end
 function run!(algorithm::QMCFBPAlgorithmPD1, 𝔓::QMCFBProblem; memoranda=Set([]))
