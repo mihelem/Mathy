@@ -9,7 +9,7 @@ algorithm = QMCFBPAlgorithmD1SG(
           max_iter=10, # not useful
           ε=1e-6,
           ϵ=1e-12);
-test = get_test(algorithm, m=5, n=8, singular=3);
+test = get_test(algorithm, m=15, n=30, singular=8);
 test.solver.options.memoranda = Set(["norm∂L′", "L′","i′"])
 run!(test)
 x = test.result.result["x′"]
@@ -17,7 +17,9 @@ x = test.result.result["x′"]
 heu = BFSHeuristic(𝔓, x)
 init!(heu)
 x′, b′ = run!(heu)
-
+A = Optimization.MinCostFlow.incidence_to_adjacency(E)
+using GraphRecipes, Plots
+graphplot(A, curvature_scalar=0.01, names=1:5, markersize=0.2, arrow=arrow(:closed, :head, 1, 1))
 
 ```
 
@@ -99,35 +101,37 @@ function run!(H::BFSHeuristic)
         println("flux: $flux => b′[$sink] -= $flux,  b′[$node] += $flux")
     end
     for i::Ti in 1:length(b)
-        if b′[i] ≥ -ϵ            # skip if not source
-            continue
-        end
+        #if b′[i] ≥ -ϵ            # skip if not source
+            #continue
+        #end
 
-        parent[i] = (0, 0, i)
-        sinks = Ti[]
-        visited = zeros(Bool, length(b′))
-        bfs_queue = Queue{Ti}()         # BFS queue
-        enqueue!(bfs_queue, i)          # start BFS from given node
-        visited[i] = true
-        while length(bfs_queue)>0
-            node = dequeue!(bfs_queue)
-            fanio = get_fanio(node)
-            for (edge, io, node′) in fanio
-                if (visited[node′] == false) && (get_max_flux(edge, io) > ϵ)
-                    visited[node′] = true
-                    enqueue!(bfs_queue, node′)
-                    parent[node′] = (edge, io, node)
-                    if b′[node′] > ϵ
-                        push!(sinks, node′)     # Or just augment the path here...
+        while b′[i] <  -ϵ
+            parent[i] = (0, 0, i)
+            sinks = Ti[]
+            visited = zeros(Bool, length(b′))
+            bfs_queue = Queue{Ti}()         # BFS queue
+            enqueue!(bfs_queue, i)          # start BFS from given node
+            visited[i] = true
+            while length(bfs_queue)>0
+                node = dequeue!(bfs_queue)
+                fanio = get_fanio(node)
+                for (edge, io, node′) in fanio
+                    if (visited[node′] == false) && (get_max_flux(edge, io) > ϵ)
+                        visited[node′] = true
+                        enqueue!(bfs_queue, node′)
+                        parent[node′] = (edge, io, node)
+                        if b′[node′] > ϵ
+                            push!(sinks, node′)     # Or just augment the path here...
+                        end
                     end
                 end
             end
-        end
 
-        for sink in sinks
-            flow_flux!(sink, get_max_flux(sink))
-            if b′[i] ≥ -ϵ
-                break
+            for sink in sinks
+                flow_flux!(sink, get_max_flux(sink))
+                if b′[i] ≥ -ϵ
+                    break
+                end
             end
         end
     end
