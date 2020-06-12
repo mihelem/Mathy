@@ -48,7 +48,10 @@ end
 function set!(algorithm::MQBPAlgorithmPG1,
     result::OptimizationResult{MQBProblem})
 
-    algorithm.x₀ = result.result["x"]  # Try also with μ′
+    algorithm.x₀ = result.result["x"]
+    if haskey(result.result, "localization")
+        algorithm.localization = result.result["localization"]
+    end
     algorithm
 end
 function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
@@ -224,7 +227,7 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
 
         @memento f = get_f(x, Q, q)
         verba(0, "f = $f")
-        result = @get_result x Π∇f normΠ∇f f
+        result = @get_result x Π∇f normΠ∇f f localization
         OptimizationResult{MQBProblem}(memoria=@get_memoria, result=result)
     end
 

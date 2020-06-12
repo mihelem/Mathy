@@ -58,7 +58,10 @@ end
 function set!(algorithm::QMCFBPAlgorithmPD1,
     result::OptimizationResult{QMCFBProblem})
 
-    algorithm.p₀ = result.result["p"]  # Try also with μ′
+    algorithm.p₀ = result.result["p"]
+    if haskey(result.result, "localization")
+        algorithm.localization = result.result["localization"]
+    end
     algorithm
 end
 function run!(algorithm::QMCFBPAlgorithmPD1, 𝔓::QMCFBProblem; memoranda=Set([]))
@@ -108,6 +111,6 @@ function run!(algorithm::QMCFBPAlgorithmPD1, 𝔓::QMCFBProblem; memoranda=Set([
     L = 0.5*x'Q*x+q'x; verba(0, "L = $L")
 
     # Need a deep copy?
-    result = @get_result p Π∇L normΠ∇L L
+    result = @get_result p Π∇L normΠ∇L L localization
     OptimizationResult{QMCFBProblem}(memoria=@get_memoria, result=result)
 end

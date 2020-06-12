@@ -79,6 +79,9 @@ function set!(algorithm::QMCFBPAlgorithmD1D,
     result::OptimizationResult{QMCFBProblem})
 
     algorithm.μ₀ = result.result["μ"]
+    if haskey(result.result, "localization")
+        algorithm.localization = result.result["localization"]
+    end
     algorithm
 end
 struct Oᾱ <: Base.Order.Ordering
@@ -376,7 +379,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             d[:] = ∂L + β*d
         end
 
-        return @get_result x μ ∂L L
+        return @get_result x μ ∂L L localization
     end
 
     return solve′(μ, Q╲, q, E, b) |>

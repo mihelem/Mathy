@@ -158,7 +158,14 @@ function get_test(algorithm::OptimizationAlgorithm{MQBProblem};
     return instance
 end
 
-export set!, run!, QuadraticBoxPCGDescent, MQBProblem, MQBPSolverOptions, MQBPAlgorithmPG1, generate_quadratic_boxed_problem, get_test
+export set!,
+    run!,
+    QuadraticBoxPCGDescent,
+    MQBProblem,
+    MQBPSolverOptions,
+    MQBPAlgorithmPG1,
+    generate_quadratic_boxed_problem,
+    get_test
 end     # end module MinQuadratic
 
 #   Usage example

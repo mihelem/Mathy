@@ -53,6 +53,7 @@ module Optimization
 using LinearAlgebra
 using Parameters
 import Plots
+import Plots: plot, plot!
 
 include("utils.jl")
 using .Utils
@@ -330,6 +331,7 @@ include("mincostflow.jl")
 using .MinCostFlow
 export  run!,
         set!,
+        init!,
         QMCFBProblem,
         get_test,
         get_reduced,
@@ -339,6 +341,7 @@ export  run!,
         QMCFBPAlgorithmD2D,
         QMCFBPAlgorithmD1D,
         QMCFBPAlgorithmD1SG,
+        BFSHeuristic,
         QMCFBPAlgorithmPD1D,
         QMCFBPSolverOptions,
         MinCostFlowProblem
@@ -363,7 +366,9 @@ include("hyper.jl")
 using .Hyper
 export WithParameterSearch,
     set!,
-    run!
+    run!,
+    plot,
+    plot!
 
 
 """

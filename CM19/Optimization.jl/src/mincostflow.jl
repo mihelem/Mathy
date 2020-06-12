@@ -18,7 +18,7 @@ module MinCostFlow
 using LinearAlgebra
 using SparseArrays
 using Parameters
-using DataStructures: PriorityQueue, peek, dequeue!
+using DataStructures: PriorityQueue, peek, dequeue!, enqueue!, Queue
 
 using ..Optimization
 using ..Optimization.MinQuadratic
@@ -26,6 +26,7 @@ using ..Optimization.Utils
 
 import ..Optimization: run!, set!
 import ..Optimization.MinQuadratic: get_test
+import ..Optimization.Descent: init!
 
 
 """
@@ -87,11 +88,13 @@ include("algorithm/QMCFBP_D2_D.jl")
 # D3 : Descent Methods - WIP
 include("algorithm/QMCFBP_D3_D.jl")
 
-"""
+# --------------------------- Heuristic -----------------------------------
+# About heuristic: Projecting in the feasible space could be done with the
+# subgradient method alone exploiting the alternating projection algorithm
+# A network specific solution should be more effective.
+include("algorithm/QMCFBP_D1_Heu.jl")
+
 # -------------- Quadratic Min Cost Flow Boxed Problem Generator ----------
-## TODO
-* Add custom active constraints
-"""
 function generate_quadratic_min_cost_flow_boxed_problem(
     type,
     m,
@@ -235,6 +238,20 @@ function get_graph_components(E)
     return (P, P_C)
 end
 
+function incidence_to_adjacency(E)
+    A = size(E)[1] |> m -> spzeros(Int64, m, m)
+    for edge in 1:size(E, 2)
+        i_s, i_t = [nzrange(E, edge);]
+        if nonzeros(E)[i_s] == 1
+            i_s, i_t = i_t, i_s
+        end
+
+        s, t = (i->rowvals(E)[i]).([i_s, i_t])
+        A[s, t] += 1
+    end
+    A
+end
+
 """
     get_reduced(𝔓::QMCFBProblem)
 Return the MinCostFlow problem corresponding to the first of the connected components in which the MinCostFlow problem can be separated
@@ -261,6 +278,7 @@ function get_reduced(𝔓::QMCFBProblem)
 end
 
 export  run!,
+        init!,
         set!,
         QMCFBProblem,
         get_test,
@@ -272,6 +290,7 @@ export  run!,
         QMCFBPAlgorithmD1D,
         QMCFBPAlgorithmD1SG,
         QMCFBPAlgorithmPD1D,
+        BFSHeuristic,
         QMCFBPSolverOptions,
         MinCostFlowProblem
 end     # end of module MinCostFlow

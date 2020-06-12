@@ -134,28 +134,30 @@ end
 mutable struct PolyakStepSize <: SubgradientMethod
     f_opt       # optimum objective value if available
     gen_γ       # estimated error in objective
+    β           # factor for the stepsize
     γ_mul       # redundant factor to be used in parameter search
 
     i           # iteration counter, needed for γ
     f_best      # useful when f_opt should be estimated
     gen_α       # Polyak step size generator
     params
-    PolyakStepSize(;f_opt=nothing, gen_γ=nothing, γ_mul=1.0) = begin
+    PolyakStepSize(;f_opt=nothing, gen_γ=nothing, γ_mul=1.0, β=1.0) = begin
         M = new()
         @some M.f_opt = f_opt
         @some M.gen_γ = gen_γ
+        M.β = β
         M.γ_mul = γ_mul
 
         if f_opt !== nothing
-            M.gen_α = (f, ∂f) -> (f-M.f_opt) / (∂f'∂f)
+            M.gen_α = (f, ∂f) -> M.β*(f-M.f_opt) / (∂f'∂f)
         elseif gen_γ !== nothing
             M.gen_α = (f, ∂f) -> begin
                 M.f_best = min(M.f_best, f)
                 (M.gen_γ(M.i+=1) |>
-                γ -> (f-M.f_best+γ) / (∂f'∂f))
+                γ -> M.β*(f-M.f_best+γ) / (∂f'∂f))
             end
         end
-        M.params = Dict(:γ_mul => [0.0, 1.0])
+        M.params = Dict(:γ_mul => [0.0, 1.0], β => [0.0, 2.0])
         M
     end
 end
@@ -306,13 +308,14 @@ mutable struct FilteredPolyakStepSize <: DeflectedSubgradientMethod
         @some M.f_opt = f_opt
         @some M.gen_γ = gen_γ
         @some M.β = β
+        M.γ_mul = γ_mul
 
         if f_opt !== nothing
             M.gen_α = (f, s) -> (f-M.f_opt) / (s's)
         elseif gen_γ !== nothing
             M.gen_α = (f, s) -> begin
                 M.f_best = min(M.f_best, f)
-                (M.gen_γ(M.i+=1) |>
+                (M.gen_γ(M.i+=1)*M.γ_mul |>
                 γ -> (f-M.f_best+γ) / (s's))
             end
         end

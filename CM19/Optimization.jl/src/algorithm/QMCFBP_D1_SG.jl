@@ -7,6 +7,7 @@ mutable struct QMCFBPAlgorithmD1SG <: OptimizationAlgorithm{QMCFBProblem}
     ϵ
     μ₀                  # starting point
 
+    stopped             # if stopped do not initialise localization
     memorabilia # set of the name of variables that can be recorded during execution
     QMCFBPAlgorithmD1SG(;
         localization=nothing,
@@ -18,6 +19,7 @@ mutable struct QMCFBPAlgorithmD1SG <: OptimizationAlgorithm{QMCFBProblem}
         μ₀=nothing) = begin
 
         algorithm = new()
+        algorithm.stopped = false
         algorithm.memorabilia =
             Set([
                 "x̅",        # → X(μ) see HarmonicErgodicPrimalStep ∈ Subgradient
@@ -51,7 +53,8 @@ function set!(algorithm::QMCFBPAlgorithmD1SG;
     max_iter=nothing,
     ε=nothing,
     ϵ=nothing,
-    μ₀=nothing)
+    μ₀=nothing,
+    stopped=nothing)
 
     @some algorithm.localization=localization
     if verbosity !== nothing
@@ -62,6 +65,7 @@ function set!(algorithm::QMCFBPAlgorithmD1SG;
     @some algorithm.ε=ε
     @some algorithm.ϵ=ϵ
     algorithm.μ₀=μ₀
+    @some algorithm.stopped=stopped
 
     algorithm
 end
@@ -69,6 +73,10 @@ function set!(algorithm::QMCFBPAlgorithmD1SG,
     result::OptimizationResult{QMCFBProblem})
 
     algorithm.μ₀ = result.result["μ′"]  # Try also with μ′
+    if haskey(result.result, "localization")
+        algorithm.localization = result.result["localization"]
+        algorithm.stopped = true
+    end
     algorithm
 end
 function run!(
@@ -85,7 +93,7 @@ function run!(
     Q╲, Q̂╲ = view╲.([Q, Q̂])
     Q̂╲[:] = 1.0 ./ Q╲
 
-    @unpack localization, verba, max_iter, ε, ϵ, μ₀ = algorithm
+    @unpack localization, verba, max_iter, ε, ϵ, μ₀, stopped = algorithm
     if μ₀ === nothing
         μ₀ = zeros(eltype(Q), m)
     end
@@ -150,14 +158,16 @@ function run!(
             () -> localization.x̅ :
             () -> nothing
 
-        wrapper(init!,
-            localization,
-            μ -> get_an_x(μ),
-            μ,
-            μ -> -get_L(μ),
-            (x, μ) -> get_L(x, μ),
-            μ -> -get_a_∂L(μ),
-            (x, μ) -> get_∂L(x, μ))
+        if stopped == false
+            wrapper(init!,
+                localization,
+                μ -> get_an_x(μ),
+                μ,
+                μ -> -get_L(μ),
+                (x, μ) -> get_L(x, μ),
+                μ -> -get_a_∂L(μ),
+                (x, μ) -> get_∂L(x, μ))
+        end
         for i in 1:max_iter
             # TODO: develop stopping criteria
             (μ_t, α, sg) =
@@ -188,7 +198,7 @@ function run!(
         end
         x̅ = get_x̅()
 
-        return @get_result x′ μ′ L′ ∂L′ x̅
+        return @get_result x′ μ′ L′ ∂L′ x̅ localization
     end
 
     solve(μ₀) |> result ->
