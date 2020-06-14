@@ -65,6 +65,7 @@ export  OptimizationInstance,
         OptimizationSolverOptions,
         OptimizationResult,
         LocalizationMethod,
+        Heuristic,
         set_param!,
         plot!,
         plot
@@ -277,6 +278,9 @@ abstract type LocalizationMethod end
 function set_param!(M::LocalizationMethod, s::Symbol, v)
     setfield!(M, s, v)
 end
+
+# todo: stronger typing
+abstract type Heuristic end
 
 include("linesearch.jl")
 using .LineSearch

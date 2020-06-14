@@ -2,7 +2,7 @@
 <html>
 <head><meta charset="utf-8" />
 
-<title>Untitled</title>
+<title>noML09_tutorial</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
@@ -13077,8 +13077,8 @@ div#notebook {
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h2 id="What's-this?">What's this?<a class="anchor-link" href="#What's-this?">&#182;</a></h2><p>In this package you'll find some experiments in optimization sprout from the realisation of a project for the course Computational Mathematics for Machine Learning and Data Analysis, held at the University of Pisa.
-For additional details, scroll through the Julia code. As a by side, please be mindful of the fact that this is the first time we get in touch with both Julia and mathematical programming.</p>
+<h2 id="What's-this?">What's this?<a class="anchor-link" href="#What's-this?">&#182;</a></h2><p>In this package you'll find some experiments in optimization sprout from the realisation of a project for the course Computational Mathematics for Learning and Data Analysis, held at the University of Pisa by Antonio Frangioni and Federico Poloni.
+For additional details, scroll through the Julia code.</p>
 
 </div>
 </div>
@@ -13131,7 +13131,7 @@ This can be accomplished with</p>
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <h4 id="Example:-Subgradient-with-Automatic-Parameter-Tuning">Example: Subgradient with Automatic Parameter Tuning<a class="anchor-link" href="#Example:-Subgradient-with-Automatic-Parameter-Tuning">&#182;</a></h4><p>In this example you'll choose a subgradient step update and nest it inside the parameter tuner, together with the parameter searcher, in this case the standard Nelder Mead. Hence you'll generate a random quadratic Min Cost Flow  boxed separable problem (<code>QMCFBProblem</code>), run the algorithm and finally plot some data from the execution. We'll guide you through the process line by line.</p>
-<p><em>Disclaimer</em>: this is an experimental algorithm for parameter tuning, in its early infancy, plenty of defects.</p>
+<p><em>Disclaimer</em> : experimental algorithm for parameter tuning, in its early infancy, plenty of defects.</p>
 
 </div>
 </div>
@@ -13152,9 +13152,9 @@ This can be accomplished with</p>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Here you create an instance of a subgradient method, the <code>HarmonicErgodicPrimalStep</code>.</p>
+<p>Create an instance of a subgradient method, the <code>HarmonicErgodicPrimalStep</code>.</p>
 <p>You can find such method, and many other, in the file <code>subgradient.jl</code>.</p>
-<p>This algorithm is specific to dual problems; in fact its peculiarity is that it keeps a convex combination of the primal values corresponding with the dual ones, through a choice of the subgradients, and such combination is guaranteed to converge to the primal optimal solution. More details in the docstring above the <code>struct</code> definition.</p>
+<p>This algorithm is specific to dual problems; in fact its peculiarity is that it keeps a convex combination of the primal values corresponding to the dual ones, through a choice of the subgradients, and such combination is guaranteed to converge to the primal optimal solution. More details in the docstring above the <code>struct</code> definition.</p>
 
 </div>
 </div>
@@ -13180,7 +13180,7 @@ This can be accomplished with</p>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Here you create an instance of an algorithm taylored to solve <code>QMCFBProblem</code>s with the use of subgradient methods.
+<p>Create an instance of an algorithm tailored to solve <code>QMCFBProblem</code>s with the use of subgradient methods.
 You can find such method in the file <code>algorithm/QMCFBP_D1_SG.jl</code>.</p>
 <p>The <code>ϵ</code> specifies how vertices are expanded, so that they are reached if nearer than <code>ϵ</code>.</p>
 <p>Other members of the <code>struct</code> not shown here are:</p>
@@ -13239,11 +13239,11 @@ You can find such method in the file <code>algorithm/QMCFBP_D1_SG.jl</code>.</p>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>This is our <em>hyper algorithm</em>, which is just a wrapper for the <code>algorithm</code> to be used by the <code>searcher</code> together with the dynamics that we want to use for the search.</p>
+<p>Our <em>hyper algorithm</em> , which is just a wrapper for the <code>algorithm</code> to be used by the <code>searcher</code> together with the dynamics that we want to use for the search.</p>
 <p>You can find it in the file <code>hyper.jl</code>.</p>
 <p>At the moment, a naive strategy is implemented, consisting in a percentage <code>δ</code> of algorithm iterations to be explored by the <code>searcher</code>, followed by an <code>1-δ</code> remaining iterations with the parameters chosen by the preceding search.</p>
 <p>All this is repeated until the total <code>algorithm_iter</code> are accounted for.</p>
-<p>As an example, in this case we have <code>algorithm_iter_per_search = 200</code>, so the search phase costs 200 iterations; they contitute <code>δ=0.1</code> of the total iterations per cycle, so there are 1800 iterations following the search with the parameters set by the search. Note that, from the computational cost point of view, the search will actually cost <code>algorithm_iter_per_search*searcher_iter = 2000</code> iterations.</p>
+<p>As an example, in this case we have <code>algorithm_iter_per_search = 200</code>, so the search phase costs 200 iterations; they constitute <code>δ=0.1</code> of the total iterations per cycle, so there are 1800 iterations following the search with the parameters set by the search. Note that, from the computational cost point of view, the search will actually cost <code>algorithm_iter_per_search*searcher_iter = 2000</code> iterations.</p>
 <p>Finally, the cycle is repeated 5 times to reach the total number of iterations, <code>algorithm_iter=10000</code>.</p>
 <p>You see that <code>param_ranges</code>, which is a <code>Dict{Symbol, Array}</code>, is indicating the range to start with in the parameter search. If you desire to keep fixed some parameter, you can do it with
 <code>fixed_params = Dict( dictionary of parameters to value to be held fixed )</code>, as an example we could specify
@@ -13273,7 +13273,7 @@ You can find such method in the file <code>algorithm/QMCFBP_D1_SG.jl</code>.</p>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>This is generating a random problem. Multiple dispatch will drive you to the code in <code>mincostflow.jl</code>, thanks to the type of <code>halgorithm &lt;: OptimizationAlgorithm{QMCFBProblem}</code>.</p>
+<p>Generate a random problem. Multiple dispatch will drive you to the code in <code>mincostflow.jl</code>, thanks to the type of <code>halgorithm &lt;: OptimizationAlgorithm{QMCFBProblem}</code>.</p>
 <p>If you do not provide a problem, as in this case, the problem is generated by the function <code>generate_quadratic_min_cost_flow_boxed_problem</code>. If you already have a problem <code>my_problem</code> to solve, you can specify it with</p>
 <p><code>𝔓=my_problem</code></p>
 <p>Scroll through the code to see how to reduce the problem, in case you want to consider separately each connected component.</p>
@@ -13300,7 +13300,7 @@ You can find such method in the file <code>algorithm/QMCFBP_D1_SG.jl</code>.</p>
 <p>Remember of <code>memoranda</code>?</p>
 <p><code>get_test</code> is returning an <code>OptimizationInstance{QMCFBProblem}</code>. You can look at the structure in the file <code>Optimization.jl</code>.</p>
 <p>Each <code>OptimizationInstance</code> contains a <strong>problem</strong> (whose type is parametrizing the instance), a <strong>solver</strong> and a <strong>result</strong>.</p>
-<p>Each solver contains an <strong>algorithm</strong> and some <strong>options</strong>, which are the ones we are specifying here, setting the variables to be tracked during the execution of the algorithm. Note that we are setting the variables to be tracked globally, so both in the <code>halgorithm</code> and the <code>algorithm</code>.</p>
+<p>Each solver contains an <strong>algorithm</strong> and some <strong>options</strong>, which are the ones we are specifying here, setting the variables to be tracked during the execution of the algorithm. Note that we are setting the variables to be tracked for the whole solver, so both in the <code>halgorithm</code> and the <code>algorithm</code>.</p>
 
 </div>
 </div>
@@ -13344,7 +13344,7 @@ You can find such method in the file <code>algorithm/QMCFBP_D1_SG.jl</code>.</p>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Here we are extracting some data which we'd love to represent. If the resulting graph will surprise you, recall how the <code>halgorithm</code> is repeating a search step 10 times...</p>
+<p>Extract some data which we'd love to represent. If the resulting graph will surprise you, recall how the <code>halgorithm</code> is repeating a search step 10 times...</p>
 <p>What about the <code>is</code>? Since we are dealing with subgradient algorithms, and not descent ones, we are not driving toward a better objective value at each step, hence the <code>i\prime</code> are recording at which step a new best value is found. Note the <code>\prime</code> also to the right of <code>L</code> and <code>norm∂L</code>: the meaning is the same, they are the values corresponding to a best new point.</p>
 
 </div>
@@ -13389,7 +13389,7 @@ You can find such method in the file <code>algorithm/QMCFBP_D1_SG.jl</code>.</p>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>This is plotting a graph of the parameters (<code>a</code> and <code>b</code>) through the <code>halgorithm</code> iterations.</p>
+<p>Plot a graph of the parameters (<code>a</code> and <code>b</code>) through the <code>halgorithm</code> iterations.</p>
 
 </div>
 </div>
@@ -13411,7 +13411,7 @@ You can find such method in the file <code>algorithm/QMCFBP_D1_SG.jl</code>.</p>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Here we are extracting part of the result, the best value for the lagrangian dual and the best parameter values at the last cycle of the <code>halgorithm</code> - the ones to be used in case you want to prosecute with a pure <code>algorithm</code>.</p>
+<p>Extract part of the result, the best value for the lagrangian dual and the best parameter values at the last cycle of the <code>halgorithm</code> - the ones to be used in case you want to prosecute with a pure <code>algorithm</code>.</p>
 
 </div>
 </div>
@@ -13433,7 +13433,7 @@ You can find such method in the file <code>algorithm/QMCFBP_D1_SG.jl</code>.</p>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Here you are extracting the problem.</p>
+<p>Extracting the problem.</p>
 <h4 id="Example:--Subgradient-with-Polyak-step-and-Elliptic-rank-1-linear-operator">Example:  Subgradient with Polyak step and Elliptic rank-1 linear operator<a class="anchor-link" href="#Example:--Subgradient-with-Polyak-step-and-Elliptic-rank-1-linear-operator">&#182;</a></h4><p>We'll show you a little code snippets to test the Polyak step size with linear elliptic operator ( in file <code>subgradient.jl</code>). Such method is enlarging the angle span by the last 2 directions of search, bringing the ellipsis generated by them to a circle. The method is applied to a prototypical example, where Polyak step size are easier because the minimum is known.</p>
 <p>The purpose of this example is to give you finer control on the usage of the methods.</p>
 
@@ -13552,6 +13552,102 @@ As usual, if you want to set some variable to track, you should specify it in th
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
+<h4 id="Example:-heuristics-for-QMCFBProblem-duals">Example: heuristics for QMCFBProblem duals<a class="anchor-link" href="#Example:-heuristics-for-QMCFBProblem-duals">&#182;</a></h4><p>The heuristic part of the project is just a stub, proper stronger typing still to be devised.
+In practice, if you want to have both a lower bound (through the dual solution) and an upper bound to the best objective value, you can add an heuristic to the algorithm which is kind of projecting in some way the solution to the feasible primal space. Check for the available heuristics in the <code>heuristic/</code> folder.</p>
+<p><em>By hand:</em></p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-julia"><pre><span></span><span class="c"># suppose you have your instance setup and already run with an algorithm using the dual D1</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">test</span><span class="o">.</span><span class="n">result</span><span class="o">.</span><span class="n">result</span><span class="p">[</span><span class="s">&quot;x′&quot;</span><span class="p">]</span>   <span class="c"># for primal converging dual subgradients, use &quot;x\overbar&quot; instead of &quot;x\prime&quot;</span>
+<span class="n">𝔓</span> <span class="o">=</span> <span class="n">test</span><span class="o">.</span><span class="n">problem</span><span class="p">;</span> 
+<span class="n">Q</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">E</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="p">(</span><span class="n">𝔓</span><span class="o">.</span><span class="n">Q</span><span class="p">,</span> <span class="n">𝔓</span><span class="o">.</span><span class="n">q</span><span class="p">,</span> <span class="n">𝔓</span><span class="o">.</span><span class="n">l</span><span class="p">,</span> <span class="n">𝔓</span><span class="o">.</span><span class="n">u</span><span class="p">,</span> <span class="n">𝔓</span><span class="o">.</span><span class="n">E</span><span class="p">,</span> <span class="n">𝔓</span><span class="o">.</span><span class="n">b</span><span class="p">);</span>
+<span class="n">heu</span> <span class="o">=</span> <span class="n">BFSHeuristic</span><span class="p">(</span><span class="n">𝔓</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">ϵ</span><span class="o">=</span><span class="mf">1e-12</span><span class="p">);</span>
+<span class="n">init!</span><span class="p">(</span><span class="n">heu</span><span class="p">);</span>
+<span class="n">x̂</span><span class="p">,</span> <span class="n">b̂</span> <span class="o">=</span> <span class="n">run!</span><span class="p">(</span><span class="n">heu</span><span class="p">);</span>              <span class="c"># b\hat is the residual after projection to feasible space, should be ~0</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p><em>As a stopping criterion in the algorithm:</em></p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-julia"><pre><span></span><span class="n">algorithm</span> <span class="o">=</span> <span class="n">QMCFBPAlgorithmD1SG</span><span class="p">(</span>
+      <span class="n">localization</span><span class="o">=</span><span class="n">subgradient</span><span class="p">,</span>
+      <span class="n">verbosity</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+      <span class="n">max_iter</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+      <span class="n">ε</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">,</span>
+      <span class="n">ϵ</span><span class="o">=</span><span class="mf">1e-12</span><span class="p">,</span>
+      <span class="n">heuristic_t</span><span class="o">=</span><span class="n">BFSHeuristic</span><span class="p">,</span>     <span class="c"># choose the heuristic as stopping criterion...</span>
+      <span class="n">heuristic_each</span><span class="o">=</span><span class="mi">30</span><span class="p">);</span>           <span class="c"># ...to be run each 30 iterations</span>
+<span class="c"># then as usual...e.g. get a test</span>
+<span class="n">test</span> <span class="o">=</span> <span class="n">get_test</span><span class="p">(</span><span class="n">algorithm</span><span class="p">,</span> <span class="n">m</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">singular</span><span class="o">=</span><span class="mi">8</span><span class="p">);</span>
+<span class="c"># except we may like to keep track of L\hat too:</span>
+<span class="n">test</span><span class="o">.</span><span class="n">solver</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">memoranda</span> <span class="o">=</span> <span class="kt">Set</span><span class="p">([</span><span class="s">&quot;norm∂L′&quot;</span><span class="p">,</span> <span class="s">&quot;L′&quot;</span><span class="p">,</span><span class="s">&quot;i′&quot;</span><span class="p">,</span><span class="s">&quot;L̂&quot;</span><span class="p">]);</span>
+<span class="c"># so that after running the algorithm</span>
+<span class="n">run!</span><span class="p">(</span><span class="n">test</span><span class="p">);</span>
+<span class="c"># and checking the final range for the optimal value of the objective</span>
+<span class="n">final_range</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span><span class="o">-&gt;</span><span class="n">test</span><span class="o">.</span><span class="n">result</span><span class="o">.</span><span class="n">result</span><span class="p">[</span><span class="n">x</span><span class="p">])</span><span class="o">.</span><span class="p">([</span><span class="s">&quot;L′&quot;</span><span class="p">,</span> <span class="s">&quot;L̂&quot;</span><span class="p">])</span>
+<span class="c"># we can plot the dynamics of both the lower and upper bound through the iterations</span>
+<span class="n">plot</span><span class="p">(</span><span class="n">test</span><span class="o">.</span><span class="n">result</span><span class="p">,</span> <span class="s">&quot;L&quot;</span><span class="p">)</span> <span class="o">|&gt;</span> <span class="n">p</span> <span class="o">-&gt;</span> <span class="n">plot!</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">test</span><span class="o">.</span><span class="n">result</span><span class="p">,</span> <span class="s">&quot;L̂&quot;</span><span class="p">);</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h4 id="Tips:-plotting-the-network-graph">Tips: plotting the network graph<a class="anchor-link" href="#Tips:-plotting-the-network-graph">&#182;</a></h4><p>If you need a visual look to the network graph, an easy way to get it plotted, given the incidence matrix <code>E</code>, is</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-julia"><pre><span></span><span class="n">A</span> <span class="o">=</span> <span class="n">Optimization</span><span class="o">.</span><span class="n">MinCostFlow</span><span class="o">.</span><span class="n">incidence_to_adjacency</span><span class="p">(</span><span class="n">E</span><span class="p">)</span>
+<span class="n">m</span><span class="p">,</span> <span class="n">n</span> <span class="o">=</span> <span class="n">size</span><span class="p">(</span><span class="n">E</span><span class="p">)</span>
+<span class="k">using</span> <span class="n">GraphRecipes</span><span class="p">,</span> <span class="n">Plots</span><span class="p">,</span> <span class="n">PyPlot</span>
+<span class="n">Plots</span><span class="o">.</span><span class="n">PyPlotBackend</span><span class="p">()</span>              <span class="c"># seems the best backend for digraphs? </span>
+<span class="n">graphplot</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> 
+    <span class="n">curvature_scalar</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> 
+    <span class="n">names</span><span class="o">=</span><span class="mi">1</span><span class="o">:</span><span class="n">m</span><span class="p">,</span> 
+    <span class="n">markersize</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> 
+    <span class="n">arrow</span><span class="o">=</span><span class="n">arrow</span><span class="p">(</span><span class="o">:</span><span class="n">closed</span><span class="p">,</span> <span class="o">:</span><span class="n">head</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
 <h4 id="Example:-something-of-numerical-analysis">Example: something of numerical analysis<a class="anchor-link" href="#Example:-something-of-numerical-analysis">&#182;</a></h4><p>If you like numerical analysis, we collected also some of the algorithm that we have been writing in numerical analysis in the file <code>numerical.jl</code>. There was the plan to drive toward pseudospectra, singular values and pseudosv, but in the end, no time to do it.</p>
 <p>As an example, if you want to give a try to fast GMRES, as described in the exercise of the book of Trefethen-Baum on Numerical Analysis, just give a call to</p>
 
@@ -13578,19 +13674,6 @@ As usual, if you want to set some variable to track, you should specify it in th
 
 </div>
 </div>
-</div>
-<div class="cell border-box-sizing code_cell rendered">
-<div class="input">
-<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
-<div class="inner_cell">
-    <div class="input_area">
-<div class=" highlight hl-julia"><pre><span></span>
-</pre></div>
-
-    </div>
-</div>
-</div>
-
 </div>
     </div>
   </div>

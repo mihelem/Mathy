@@ -2,7 +2,7 @@
 Example
 ```julia
 using Optimization
-subgradient = Subgradient.FilteredPolyakStepSize(gen_γ=i -> 1000.0/i, β=0.4)
+subgradient = Subgradient.FilteredPolyakStepSize(gen_γ=i -> 10.0/i, β=0.4)
 algorithm = QMCFBPAlgorithmD1SG(
           localization=subgradient,
           verbosity=1,
@@ -24,7 +24,7 @@ graphplot(A, curvature_scalar=0.01, names=1:5, markersize=0.2, arrow=arrow(:clos
 ```
 
 """
-mutable struct BFSHeuristic
+mutable struct BFSHeuristic <: Heuristic
     E::SparseMatrixCSC
     Eᵀ::SparseMatrixCSC
     b
@@ -98,13 +98,9 @@ function run!(H::BFSHeuristic)
             x[edge] -= io*flux
         end
         b′[node] += flux
-        println("flux: $flux => b′[$sink] -= $flux,  b′[$node] += $flux")
+        # println("flux: $flux => b′[$sink] -= $flux,  b′[$node] += $flux")
     end
     for i::Ti in 1:length(b)
-        #if b′[i] ≥ -ϵ            # skip if not source
-            #continue
-        #end
-
         while b′[i] <  -ϵ
             parent[i] = (0, 0, i)
             sinks = Ti[]

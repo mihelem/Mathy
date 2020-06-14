@@ -1,0 +1,215 @@
+\documentclass[10pt,twoside,book,a5paper]{ncc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{indentfirst}\usepackage{graphicx}
+\graphicspath{ {./img/} }
+
+\input{definition}
+
+\begin{document}
+
+\title{noML09: Deflected Subgradient Methods for Dual Formulations of Convex Quadratic Separable Min Cost Flow Boxed Problems}
+\author{484805~e~568235}{484805~e~568235}
+\maketitle	
+
+\index{484805~e~568235}	
+
+\section*{The Problem and The Approach}
+
+We explore some possible dual approaches to solve the Min Cost Flow box constrained convex quadratic separable problem $(P)$ defined by
+
+\begin{gather*}
+\nu_*(P) = \min_{x \in S_{(P)}} \frac{1}{2} x^\intercal Q x + q^\intercal x \\
+\textrm{where} \qquad S_{(P)} \: :\quad E x = b \quad \cap \quad l \le x \le u
+\end{gather*}
+
+where $E$, of size $(m, n)$, is the node-arc incidence matrix of a directed graph and $Q\succcurlyeq 0$ is a diagonal matrix.
+We choose one of the simplest dual reformulations and approach its iterative solution implementing some subgradient methods; hence we touch upon deflected methods, automatic parameter tuning, and one of the "well known" properties of subgradient methods in dual reformulations.
+
+\section{Dual Reformulations}
+\label{base-section}
+
+\paragraph{(D1) Dual Flux Constraints}
+Since box constraints are easy, the first option is to dualise only the flux constraints:
+\begin{gather*}
+    \nu_*(P) = \min_{x \in S_{(D1)}} \max_{\mu} L(x, \mu) \quad\ge\quad \max_{\mu} \min_{x \in S_{(D1)}} L(x, \mu) = \nu^*(D1)  \\
+   \textrm{where}\qquad  L(x, \mu) = \frac{1}{2} x^\intercal Q x + q^\intercal x + \mu^\intercal (E x - b)  \\
+    \textrm{and}\qquad  S_{(D1)} \: :\quad l \le x \le u
+\end{gather*}
+
+Since the feasible space is a box and the target function is separable and convex, to find
+\[
+    L(\mu) = \min_{x \in S_{(D1)}} L(x, \mu) = L(\overline{x}, \mu)
+\]
+when $Q$ is positive definite we can solve for $x$ in
+\[
+    \nabla_x L(\overline{x}, \mu) = Q \overline + q + E^\intercal\mu = 0
+\]
+and then project to the nearest side, component by component:
+\[
+    x = \max.(l, \min.(u, -Q^{-1}(q + E^\intercal\mu)))
+\]
+For the coordinates corresponding to $\ker Q$, we should look for
+\[
+    \label{eq:1}\min_x (q + E^\intercal \mu)_j x_j \implies \begin{cases}
+        (q + E^\intercal \mu)_j > 0 \implies x_j = l_j \\
+        (q + E^\intercal \mu)_j < 0 \implies x_j = u_j \\
+        x_j \in [l_j, u_j] \quad \textrm{otherwise}
+    \end{cases}
+\]
+The specific value of $x_j$ that we choose corresponds to a choice of the supergradient $\partial_\mu L(\mu) = E x(\mu) - b$, where $x(\mu)$ can be considered a multivalued function, therefore $L(\mu)$ is "piecewise differentiable" but still easy to calculate.
+
+\paragraph{(D2) Dual Flux and Box Constraints}
+We start from the Lagrangian
+    \begin{gather*}
+    L(x, \mu, \lambda) = \frac{1}{2}x^\intercal Q x + q^\intercal x + \mu^\intercal(Ex - b) + \lambda_u^\intercal(x-u) + \lambda_l^\intercal(l-x) \\
+    \textrm{with} \qquad \lambda .\ge 0
+    \end{gather*}
+Since the linear coefficients of $x$ will determine the position of the minimum of $L$ for fixed dual parameters, a possible substitution to make clear the relevant degrees of freedom is
+    \begin{gather*}
+    L(x, \mu, \gamma, \lambda_u) = \frac{1}{2}x^\intercal Q x + (\gamma + q)^\intercal x - \mu^\intercal b + (E^\intercal\mu - \gamma)^\intercal l + \lambda_u^\intercal(l-u) \\
+    \textrm{with} \qquad \lambda_u .\ge 0 \; \And \; \lambda_u + E^\intercal\mu - \gamma .\ge 0 \\
+    \impliedby \qquad
+    \gamma = \Delta \lambda + E^\intercal \mu \qquad \textrm{where} \qquad \Delta \lambda = \lambda_u - \lambda_l
+    \end{gather*}
+In the coordinate subspace defined by $\ker Q$ the Lagrangian is unbounded below unless $\nabla_x|_{\ker Q} L(x, \mu, \gamma, \lambda_u) = 0$.
+Since $Q$ is diagonal, we can decompose the coordinate space in the kernel and the co-image by a simple partition of the coordinates, corresponding in obvious notations to $Q_0, x_0 \dots$ and $Q_1, x_1, \dots$. Hence, \emph{for the interesting (finite) minima of $L$ varying $x$}, we have
+    \begin{gather*}
+    Q \Bar{x}(\gamma) + \gamma + q = 0 \implies \\
+    L(\mu, \gamma, \lambda_u) = L(\Bar{x}(\gamma), \mu, \gamma, \lambda_u) = \min_x L(x, \mu, \gamma, \lambda_u) = \dots \\
+    \dots \; = -\frac{1}{2}(\gamma + q)_1^\intercal Q_1^{-1} (\gamma + q)_1 - \mu^\intercal b + (E^\intercal\mu - \gamma)^\intercal l + \lambda_u^\intercal(l-u) = \dots \\
+    \dots \; = -\frac{1}{2}(\gamma + q)_1^\intercal Q_1^{-1} (\gamma + q)_1 - \mu^\intercal b - (\gamma + q)^\intercal l + (E^\intercal\mu + q)^\intercal l + \lambda_u^\intercal(l-u)
+    \end{gather*}
+Note that
+    \begin{gather*}
+    Q \Bar{x} + \gamma + q = 0 \quad \iff \quad \gamma_0 + q_0 = 0 \; \And \; Q_1 \Bar{x}_1 + \gamma_1 + q_1 = 0
+    \end{gather*}
+With the substitution $\Tilde{\gamma} = \gamma + q$, our objective function is written
+    \begin{gather*}
+    \nu_*(D2) = \max_{\Tilde{\gamma}, \mu, \lambda_u} L(\Tilde{\gamma}, \mu, \lambda_u) \quad \textrm{beholding} \\
+    \lambda_u .\ge \max.(0, \Tilde{\gamma} - q - E^\intercal\mu) \quad \And \quad \Tilde{\gamma}_0 = 0    \\
+    \textrm{where} \quad L(\Tilde{\gamma}, \mu, \lambda_u) = -\frac{1}{2} \Tilde{\gamma}_1^\intercal Q_1^{-1}\Tilde{\gamma}_1 - \mu^\intercal b - \Tilde{\gamma}^\intercal l + (E^\intercal\mu + q)^\intercal l + \lambda_u^\intercal(l-u)
+    \end{gather*}
+We are looking for the maximum, we know that $l-u .\ge 0$ and we have the constraint $\lambda_u .\ge \max.(0, \Tilde{\gamma} - q - E^\intercal\mu)$, so, in the last formula for the Lagrangian, the last term $\lambda_u^\intercal(l-u)$ can be restricted to an equality, leading to
+\begin{gather*}
+    \max_{\Tilde{\gamma}, \mu, \lambda_u} L(\Tilde{\gamma}, \mu, \lambda_u) = \max_{\Tilde{\gamma}, \mu} L(\tilde{\gamma}, \mu)  \quad \textrm{where} \\
+    L(\tilde{\gamma}, \mu) = -\frac{1}{2} \Tilde{\gamma}_1^\intercal Q_1^{-1}\Tilde{\gamma}_1 - \mu^\intercal b - \Tilde{\gamma}^\intercal l + (E^\intercal\mu + q)^\intercal l + \max.(0, \Tilde{\gamma} - q - E^\intercal\mu)^\intercal(l-u) = \dots \\
+    \dots \; = -\frac{1}{2} \Tilde{\gamma}_1^\intercal Q_1^{-1}\Tilde{\gamma}_1 - \mu^\intercal b -  (\Tilde{\gamma} - q - E^\intercal\mu)^\intercal(l + (u-l) .* \theta.(\Tilde{\gamma} - q - E^\intercal\mu))
+\end{gather*}
+where $a\theta(a) = \max(0, a)$. Since $Q_1$ is diagonal, we have
+\begin{gather*}
+    L(\tilde{\gamma}, \mu) = \sum_i L_i (\tilde{\gamma}, \mu) - \mu^\intercal b \quad \textrm{where} \\
+    L_i (\tilde{\gamma}, \mu) = -\frac{1}{2} \Tilde{\gamma}_i Q_{ii}^{-1}\Tilde{\gamma}_i - (\Tilde{\gamma} - q - E^\intercal\mu)_i \begin{cases}
+             l_i \quad \textrm{when} (\Tilde{\gamma} - q - E^\intercal\mu)_i \le 0 \\
+             u_i \quad \textrm{when} (\Tilde{\gamma} - q - E^\intercal\mu)_i \ge 0
+        \end{cases}
+\end{gather*}
+which is an unconstrained, continuous and piecewise differentiable formulation of the problem. Recall that $(\Tilde{\gamma} - q - E^\intercal\mu) = \Delta \lambda$.
+The optimality conditions can be expressed in terms of the supergradient: we denote with $p_i$ the coordinate $l_i$ if $\Delta\lambda_i < 0$, $u_i$ if $\Delta\lambda_i > 0$ and a value in $[l_i, u_i]$ otherwise. Then, when the supergradient conditions
+\[
+    Q p + \Tilde{\gamma} = 0 \quad \And \quad E p - b = 0
+\]
+are met, we obtain
+\[
+L = -\mu^\intercal b + \frac{1}{2}p^\intercal Q p + (E^\intercal\mu + q)^\intercal p = \frac{1}{2}p^\intercal Q p + q^\intercal p
+\]
+Duality is there.
+
+\paragraph{(D3) Flux Constraints in Parametric Form, Dual Box Constraints}
+From the incidence matrix of a connected graph we can easily extract a submatrix of maximum degree by choosing a spanning tree; then, chosen a root, its inverse is described in each node by the subtree rooted in such node\footnote{Given a root, the sparsest inverse with such node excluded is found by choosing the BFS tree, so the submatrix of maximum rank with sparsest inverse can be found by comparing the BFS trees of each node}.
+TBW
+\paragraph{Fancier Duals}
+Among the many other dual reformulations of the problem, the most appealing could probably be the smoothing ones, which unlock the use of fast descent methods\cite{Universal}. We are not covering them since this work is explicitly required to deal with subgradient methods.
+
+\section{Algorithms and Implementation}
+We choose the dual reformulation (D1) as the main testing bed for the many iterative solvers we implement. Since an exact line search is possible, our main threads of exploration can be divided into the ones using a line search and the other ones using proper subgradient methods.
+\paragraph{Conjugate Subgradient with Exact Line Search} We apply Polak-Ribière direction update endowing the solver with a projected conjugate gradient algorithm to find the minimum norm subgradient \{\ref{fig:PCG}\}. The exact line search \{\ref{fig:LineSearch}\} exploits a priority queue to pop in the right order the intersection points where the hessian of the dual Lagrangian is changing. The sorting criterion checks for consistency and imposes an ordering coherent with the geometry up to a given $\epsilon$, with the goal of curing the inconsistencies deriving from floating point errors. Nonetheless, the implementation needs further revisions to tackle straightly with a strongly singular $Q$ (problem which can be cured with the simplest of the smoothing methods, that is reaching iteratively the singular $Q$).
+\paragraph{Subgradient Methods} We experiment with many different subgradient and deflected subgradient steps. Parameter tuning is a game changer here and the performance of some algorithms is extremely sensible to parameters \{\ref{fig:NesterovParameters}, \ref{fig:RMSPropParameters}\}. 
+Hence all the subgradient steps are implemented so that they can be controlled by an external tuner. At the moment the only parameter search which is implemented is the standard Nelder Mead; further work is required to adapt it to the constrained case, though. As a by side, sometimes there seems to be a kind of stationary point of the dynamics of the algorithms with varying parameters, but is this true?
+\paragraph{Upper Bounds: Feasible Point in Primal Space} In the desire to have finer control on the convergence of the algorithm, a strategy is to calculate on the fly (at each step or every $k$ steps of the algorithm) a sort of projection of the primal point to the feasible space. The first general way would be to use again a subgradient method, with a Polyak-like stepsize, together with the alternating projection algorithm \cite{NotesBoyd}. In our case we would consider a thickened form of the hyperplane described by the flux constraints and the box.
+Otherwise we can redistribute the remaining flow until we meet the required flux conservation constraints. The simplest way is to find augmenting paths with a BFS, with no weights on the arcs. Otherwise we can consider some linearization of the original problem and assign the resulting weights to the arcs, therefore assigning the augmenting paths correspondingly.
+
+\paragraph{Implementation}
+The software is implemented as a package in Julia. Companion to this report a Jupyter notebook, illustrating the use of the package with some examples.
+
+\begin{thebibliography}{99}
+
+\Bibitem{Frangioni}
+\by Frangioni~A., Gendron~B., Gorgone~E. 
+\paper On the Computational Efficiency of Subgradient Methods: a Case Study with Lagrangian Bounds
+\jour Mathematical Programming Computation
+\yr 2017
+\vol 9
+\issue 4
+\pages 573–604
+
+\Bibitem{Primal}
+\by Gustavsson~E., Patriksson~M., Strömberg~A.
+\yr 2014
+\paper Primal convergence from dual subgradient methods for convex optimization
+\vol 150
+\jour Mathematical Programming
+
+\Bibitem{Universal}
+\paper Universal gradient methods for convex optimization problems
+\by Nesterov~Y.
+\jour Mathematical Programming
+\yr 2015
+\vol 152
+\pages 381--404
+
+\Bibitem{NotesBoyd}
+\paper Subgradient Methods
+\by Boyd~S.
+\jour  Notes for EE364b, Stanford University
+\yr 2014
+
+\Bibitem{Stetsyuk}
+\paper Accelerated subgradient method with Polyak's step
+\by Stetsyuk~P.
+\jour Workshop
+\yr 2018
+
+\end{thebibliography}
+
+\section*{}
+%\section*{Сведения об авторе(ах)}
+
+\begin{minipage}{\textwidth} 
+
+
+\small
+\noindent \textbf{Lapo Toloni}, e-mail: \email{l.toloni@studenti.unipi.it}
+
+\noindent \textbf{Michele Miccinesi}, e-mail: \email{m.miccinesi@studenti.unipi.it}\par 
+\end{minipage}
+\newpage
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.80\textwidth]{NesterovParameters}
+\caption{$||\partial L||$ Log10-scale objective minimization with varying parameters of the Nesterov Momentum algorithm. Here the parameters are encompassing a relative variation of only $10^{-8}$, but the algorithm dynamic is completely changing}
+\label{fig:NesterovParameters}
+\end{figure}
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.80\textwidth]{RMSPropParameters}
+\caption{$||\partial L||$ Log10-scale objective minimization with varying parameters of the RMSProp algorithm. Usually, varying the parameters of such algorithms, it is possible to reach a "stationary point" for the dynamics; sometimes, with a stroke of luck, as in this case, moving a bit further may lead to a point where the dynamics is initially less stable, afterward incredibly faster}
+\label{fig:RMSPropParameters}
+\end{figure}
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.80\textwidth]{PCG}
+\caption{$||E x - b||^2$ Log10-scale objective minimization typical dynamics of projected conjugate gradient with long search + local search, here on a $1000\times 2000$ incidence matrix $E$.}
+\label{fig:PCG}
+\end{figure}
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.80\textwidth]{LineSearch}
+\caption{$L(\mu+\alpha d)$ Lagrangian dual (D1) restricted to the direction of line search when $Q$ is singular; here the primal $x$ corresponds to the supergradient we choose on the top vertex.}
+\label{fig:LineSearch}
+\end{figure}
+
+%\clearpage
+%\tableofcontents
+
+\end{document}

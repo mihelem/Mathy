@@ -92,7 +92,7 @@ include("algorithm/QMCFBP_D3_D.jl")
 # About heuristic: Projecting in the feasible space could be done with the
 # subgradient method alone exploiting the alternating projection algorithm
 # A network specific solution should be more effective.
-include("algorithm/QMCFBP_D1_Heu.jl")
+include("heuristic/QMCFBP_D1_BFS.jl")
 
 # -------------- Quadratic Min Cost Flow Boxed Problem Generator ----------
 function generate_quadratic_min_cost_flow_boxed_problem(
@@ -296,7 +296,7 @@ export  run!,
 end     # end of module MinCostFlow
 
 """
-In the REPL, the following snippet may be usefulel to manually explore the
+In the REPL, the following snippet may be useful to manually explore the
 space of parameters. TODO -> make a macro working for every algo/subgradient etc..
 ```julia
 using Optimization.Utils

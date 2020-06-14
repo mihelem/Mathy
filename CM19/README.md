@@ -25,6 +25,11 @@ Then you are ready to go.
 
 Here are some examples, which may give you an idea of where you can go with this package.
 
+For more examples, look at the [jupyter notebook](report/noML09_tutorial.ipynb) -
+also available an [html version](report/noML09_tutorial.html).
+
+For a sketch of the theory behind the code, take a look at the [report](report/noML09___deflected_subgradients_in_dual_reformulations_of_quadratic_convex_separable_min_cost_flow__problems.pdf).
+
 ### QMCFBP : Quadratic Min Cost Flow Boxed Problem (...separable convex...)
 `→ mincostflow.jl`
 
@@ -47,7 +52,7 @@ subgradient =
         γ=1-1e-11)
 algorithm =
     QMCFBPAlgorithmD1SG(
-        subgradient=subgradient,
+        localization=subgradient,
         verbosity=0,
         max_iter=1000000,
         ϵ=1e-8,
@@ -73,15 +78,6 @@ p =
         "norm∂L′",
         "i′",
         mapping=x->log.(x))
-```
-
-### MQBP : Min Quadratic Boxed Problem (convex)
-__→ minquadratic.jl__
-
-`minₓ ½ x'Qx + q'x` where  `l .≤ x .≤ u` and `Q ≽ 0`
-
-```julia
-
 ```
 
 ### Code Snippets
