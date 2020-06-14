@@ -9129,15 +9129,15 @@ label {
 }
 /* Flexible box model classes */
 /* Taken from Alex Russell http://infrequently.org/2009/08/css-3-progress/ */
-/* This file is a compatability layer.  It allows the usage of flexible box 
+/* This file is a compatability layer.  It allows the usage of flexible box
 model layouts accross multiple browsers, including older browsers.  The newest,
 universal implementation of the flexible box model is used when available (see
-`Modern browsers` comments below).  Browsers that are known to implement this 
+`Modern browsers` comments below).  Browsers that are known to implement this
 new spec completely include:
 
     Firefox 28.0+
     Chrome 29.0+
-    Internet Explorer 11+ 
+    Internet Explorer 11+
     Opera 17.0+
 
 Browsers not listed, including Safari, are supported via the styling under the
@@ -12519,7 +12519,7 @@ div#pager .ui-resizable-handle {
   background: #f7f7f7;
   border-top: 1px solid #cfcfcf;
   border-bottom: 1px solid #cfcfcf;
-  /* This injects handle bars (a short, wide = symbol) for 
+  /* This injects handle bars (a short, wide = symbol) for
         the resize handle. */
 }
 div#pager .ui-resizable-handle::after {
@@ -13033,14 +13033,14 @@ div#notebook {
   div.cell {
     display: block;
     page-break-inside: avoid;
-  } 
-  div.output_wrapper { 
-    display: block;
-    page-break-inside: avoid; 
   }
-  div.output { 
+  div.output_wrapper {
     display: block;
-    page-break-inside: avoid; 
+    page-break-inside: avoid;
+  }
+  div.output {
+    display: block;
+    page-break-inside: avoid;
   }
 }
 </style>
@@ -13086,7 +13086,7 @@ For additional details, scroll through the Julia code.</p>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h3 id="Setup">Setup<a class="anchor-link" href="#Setup">&#182;</a></h3><p>Copy the repo to your favourite folder, then add the path to the <code>LOAD_PATH</code> variable in your Julia REPL. 
+<h3 id="Setup">Setup<a class="anchor-link" href="#Setup">&#182;</a></h3><p>Copy the repo to your favourite folder, then add the path to the <code>LOAD_PATH</code> variable in your Julia REPL.
 This can be accomplished with</p>
 
 </div>
@@ -13180,7 +13180,7 @@ This can be accomplished with</p>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Create an instance of an algorithm tailored to solve <code>QMCFBProblem</code>s with the use of subgradient methods.
+<p>Create an instance of an algorithm taylored to solve <code>QMCFBProblem</code>s with the use of subgradient methods.
 You can find such method in the file <code>algorithm/QMCFBP_D1_SG.jl</code>.</p>
 <p>The <code>ϵ</code> specifies how vertices are expanded, so that they are reached if nearer than <code>ϵ</code>.</p>
 <p>Other members of the <code>struct</code> not shown here are:</p>
@@ -13530,16 +13530,16 @@ As usual, if you want to set some variable to track, you should specify it in th
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-julia"><pre><span></span><span class="n">algorithm</span> <span class="o">=</span> <span class="n">QMCFBPAlgorithmD1D</span><span class="p">(</span>
-    <span class="n">descent</span><span class="o">=</span><span class="n">ConjugateGradientDescent</span><span class="p">(),</span> 
-    <span class="n">verbosity</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> 
-    <span class="n">max_iter</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> 
+    <span class="n">descent</span><span class="o">=</span><span class="n">ConjugateGradientDescent</span><span class="p">(),</span>
+    <span class="n">verbosity</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">max_iter</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
     <span class="n">ε</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">,</span>      <span class="c"># max error required</span>
     <span class="n">ϵₘ</span><span class="o">=</span><span class="mf">1e-12</span><span class="p">,</span>    <span class="c"># epsilon up to which to approximate being inside, outside</span>
     <span class="n">cure_singularity</span><span class="o">=</span><span class="kc">true</span><span class="p">)</span>   <span class="c"># if true, approach iteratively the singular Q</span>
 <span class="n">test</span> <span class="o">=</span> <span class="n">get_test</span><span class="p">(</span>
-    <span class="n">algorithm</span><span class="p">,</span> 
-    <span class="n">m</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> 
-    <span class="n">n</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span> 
+    <span class="n">algorithm</span><span class="p">,</span>
+    <span class="n">m</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+    <span class="n">n</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span>
     <span class="n">singular</span><span class="o">=</span><span class="mi">2</span><span class="p">);</span>
 <span class="n">run!</span><span class="p">(</span><span class="n">test</span><span class="p">);</span>
 </pre></div>
@@ -13566,7 +13566,7 @@ In practice, if you want to have both a lower bound (through the dual solution) 
     <div class="input_area">
 <div class=" highlight hl-julia"><pre><span></span><span class="c"># suppose you have your instance setup and already run with an algorithm using the dual D1</span>
 <span class="n">x</span> <span class="o">=</span> <span class="n">test</span><span class="o">.</span><span class="n">result</span><span class="o">.</span><span class="n">result</span><span class="p">[</span><span class="s">&quot;x′&quot;</span><span class="p">]</span>   <span class="c"># for primal converging dual subgradients, use &quot;x\overbar&quot; instead of &quot;x\prime&quot;</span>
-<span class="n">𝔓</span> <span class="o">=</span> <span class="n">test</span><span class="o">.</span><span class="n">problem</span><span class="p">;</span> 
+<span class="n">𝔓</span> <span class="o">=</span> <span class="n">test</span><span class="o">.</span><span class="n">problem</span><span class="p">;</span>
 <span class="n">Q</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">E</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="p">(</span><span class="n">𝔓</span><span class="o">.</span><span class="n">Q</span><span class="p">,</span> <span class="n">𝔓</span><span class="o">.</span><span class="n">q</span><span class="p">,</span> <span class="n">𝔓</span><span class="o">.</span><span class="n">l</span><span class="p">,</span> <span class="n">𝔓</span><span class="o">.</span><span class="n">u</span><span class="p">,</span> <span class="n">𝔓</span><span class="o">.</span><span class="n">E</span><span class="p">,</span> <span class="n">𝔓</span><span class="o">.</span><span class="n">b</span><span class="p">);</span>
 <span class="n">heu</span> <span class="o">=</span> <span class="n">BFSHeuristic</span><span class="p">(</span><span class="n">𝔓</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">ϵ</span><span class="o">=</span><span class="mf">1e-12</span><span class="p">);</span>
 <span class="n">init!</span><span class="p">(</span><span class="n">heu</span><span class="p">);</span>
@@ -13633,10 +13633,10 @@ In practice, if you want to have both a lower bound (through the dual solution) 
 <span class="n">m</span><span class="p">,</span> <span class="n">n</span> <span class="o">=</span> <span class="n">size</span><span class="p">(</span><span class="n">E</span><span class="p">)</span>
 <span class="k">using</span> <span class="n">GraphRecipes</span><span class="p">,</span> <span class="n">Plots</span><span class="p">,</span> <span class="n">PyPlot</span>
 <span class="n">Plots</span><span class="o">.</span><span class="n">PyPlotBackend</span><span class="p">()</span>              <span class="c"># seems the best backend for digraphs? </span>
-<span class="n">graphplot</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> 
-    <span class="n">curvature_scalar</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> 
-    <span class="n">names</span><span class="o">=</span><span class="mi">1</span><span class="o">:</span><span class="n">m</span><span class="p">,</span> 
-    <span class="n">markersize</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> 
+<span class="n">graphplot</span><span class="p">(</span><span class="n">A</span><span class="p">,</span>
+    <span class="n">curvature_scalar</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+    <span class="n">names</span><span class="o">=</span><span class="mi">1</span><span class="o">:</span><span class="n">m</span><span class="p">,</span>
+    <span class="n">markersize</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
     <span class="n">arrow</span><span class="o">=</span><span class="n">arrow</span><span class="p">(</span><span class="o">:</span><span class="n">closed</span><span class="p">,</span> <span class="o">:</span><span class="n">head</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
 </pre></div>
 
@@ -13679,7 +13679,7 @@ In practice, if you want to have both a lower bound (through the dual solution) 
   </div>
 </body>
 
- 
+
 
 
 </html>
