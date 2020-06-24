@@ -21,7 +21,14 @@ mutable struct MQBPAlgorithmPG1 <: OptimizationAlgorithm{MQBProblem}
 
         algorithm = new()
         algorithm.memorabilia = Set(["normΠ∇f", "Π∇f", "x", "f", "d"])
-        set!(algorithm, descent=descent, verbosity=verbosity, my_verba=my_verba, max_iter=max_iter, ε=ε, ϵ₀=ϵ₀, x₀=x₀)
+        set!(algorithm,
+            localization=localization,
+            verbosity=verbosity,
+            my_verba=my_verba,
+            max_iter=max_iter,
+            ε=ε,
+            ϵ₀=ϵ₀,
+            x₀=x₀)
     end
 end
 function set!(algorithm::MQBPAlgorithmPG1;

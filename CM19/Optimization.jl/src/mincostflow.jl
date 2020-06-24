@@ -83,6 +83,8 @@ include("algorithm/QMCFBP_PD1_D.jl")
 include("algorithm/QMCFBP_D1_SG.jl")
 # D1 : Descent Methods, also with specialised exact line search - WIP
 include("algorithm/QMCFBP_D1_D.jl")
+# D1 : Commons
+include("algorithm/QMCFBP_D1.jl")
 # D2 : Descent Methods, also with specialised exact line search -WIP
 include("algorithm/QMCFBP_D2_D.jl")
 # D3 : Descent Methods - WIP
@@ -130,6 +132,8 @@ function generate_quadratic_min_cost_flow_boxed_problem(
     𝔭[lu] .= true
     q = rand(n) |>
         r -> -Qu + (Qu-Ql).*(𝔭[:, 1] + r.*(1 .- (𝔭[:, 2] - 𝔭[:, 1]))) + r.*(𝔭[:,1]-𝔭[:,2])
+    q[end-singular+1:end] +=
+        (rand(singular) .* (𝔭[end-singular+1:end, 1] - 𝔭[end-singular+1:end, 2]))
 
     # choose b such that there is an x :  l ≤ x ≤ u  ∩  Ex-b = 0
     b = E*x
@@ -144,7 +148,7 @@ end
 # ----------- Quadratic Min Cost Flow Boxed Problem - Algorithm Tester -------------
 """
 function get_test(algorithm::OptimizationAlgorithm{QMCFBProblem};
-    m::Integer, n::Integer,
+    m::Integer=0, n::Integer=0,
     singular::Integer=0,
     active::Integer=0,
     𝔓::Union{Nothing, QMCFBProblem}=nothing,
@@ -152,7 +156,7 @@ function get_test(algorithm::OptimizationAlgorithm{QMCFBProblem};
     type::DataType=Float64,)
 
     if 𝔓 === nothing
-        𝔓 = generate_quadratic_min_cost_flow_boxed_problem(type, m, n, singular=singular)
+        𝔓 = generate_quadratic_min_cost_flow_boxed_problem(type, m, n, singular=singular, active=active)
         if should_reduce == true
             𝔓 = get_reduced(𝔓)[1]
         end

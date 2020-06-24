@@ -98,7 +98,7 @@ function set!(algorithm::QMCFBPAlgorithmD1SG,
         algorithm.stopped = true
     end
     if haskey(result.result, "x̂") && haskey(result.result, "L̂")
-        if L̂ < algorithm.L̂
+        if result.result["L̂"] < algorithm.L̂
             algorithm.L̂ = result.result["L̂"]
             algorithm.x̂ = result.result["x̂"]
         end
@@ -158,10 +158,10 @@ function run!(
         x = get_an_x(μ)
         get_L(x, μ)
     end
-    # @return: a subgradient of L(μ)
     function get_∂L(x, μ)
         E*x-b
     end
+    # @return: a subgradient of L(μ)
     function get_a_∂L(μ)
         x = get_an_x(μ)
         get_∂L(x, μ)

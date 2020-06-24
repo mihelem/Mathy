@@ -24,8 +24,8 @@ mutable struct WithStopCriterion{SM <: SubgradientMethod} <: SubgradientMethod
     l                   # lower bound on the objective function
     l′                  # best lower bound
     params
-    WithStopCriterion(method; R=Inf) = begin
-        M = new{WithStopCriterion{SM}}(method, R)
+    WithStopCriterion{SM}(method; R=Inf) where {SM <: SubgradientMethod} = begin
+        M = new{SM}(method, R)
         M.params = method.params
         M
     end
@@ -34,8 +34,10 @@ function set_param!(M::WithStopCriterion{<:SubgradientMethod}, s::Symbol, v)
     setfield!(M.method, s, v)
 end
 function init!(M::WithStopCriterion{<:SubgradientMethod}, f, ∂f, x)
+    init!(M.method, f, ∂f, x)
     M.l′ = -Inf
     M.l = [-M.R*M.R, 0.0]
+    M
 end
 function step!(M::WithStopCriterion{<:SubgradientMethod}, f, ∂f, x)
     f₀, ∂f₀ = f(x), ∂f(x)
@@ -122,11 +124,12 @@ mutable struct NoMemoryStepLength <: SubgradientMethod
     end
 end
 function init!(M::NoMemoryStepLength, f, ∂f, x)
-    i=0
+    M.i=0
+    M
 end
 function step!(M::NoMemoryStepLength, f, ∂f, x)
     sg = ∂f(x)
-    γ = gen_γ(M.i+=1, f, ∂f, x, sg)
+    γ = M.γ_mul*M.gen_γ(M.i+=1, f, ∂f, x, sg)
     γ/norm(sg) |>
         α -> (x - α*sg, α, sg)
 end
@@ -171,6 +174,70 @@ function step!(M::PolyakStepSize, f, ∂f, x)
     (x-α*sg, α, sg)
 end
 
+mutable struct TargetLevelPolyakStepSize <: SubgradientMethod
+    β
+    δ
+    ρ
+    R
+    f_opt
+    f_target
+    get_f_target
+
+    f_best
+    r
+    i
+    params
+    function TargetLevelPolyakStepSize(;
+        β=1.0,
+        δ=0.0,
+        ρ=1.0,
+        R=Inf,
+        f_opt=nothing,
+        f_best=nothing,
+        f_target=nothing,
+        get_f_target=nothing)
+
+        M = new(β, δ, ρ, R)
+        if f_opt !== nothing
+            M.f_opt = f_opt
+            M.get_f_target = M -> M.f_opt
+        elseif get_f_target !== nothing
+            M.get_f_target = get_f_target
+        else
+            M.get_f_target = M -> M.f_target-δ
+        end
+        M.params = Dict(
+            :β=>[0.0, 2.0],
+            :δ=>[0.0, Inf],
+            :ρ=>[0.0, 1.0],
+            :R=>[0.0, Inf])
+        M
+    end
+end
+function init!(M::TargetLevelPolyakStepSize, f, ∂f, x)
+    M.i = 0
+    M.r = 0.0
+    M.f_best = M.f_target = f(x)
+    M
+end
+function step!(M::TargetLevelPolyakStepSize, f, ∂f, x)
+    M.i += 1
+
+    f_val, g = f(x), ∂f(x)
+
+    α = M.β*(f_val-M.get_f_target(M))
+    if f_val ≤ M.f_target - M.δ/2
+        M.f_target = M.f_best
+    elseif M.r > M.R
+        M.δ = M.δ*M.ρ
+        M.r = 0.0
+    else
+        M.r += α*norm(g)
+    end
+    M.f_best = min(f_val, M.f_best)
+    M
+end
+
 abstract type DualSubgradientMethod <: SubgradientMethod end
 
 # Ergodic sequences of primal iterates have guarantee of convergence
@@ -187,7 +254,7 @@ abstract type DualSubgradientMethod <: SubgradientMethod end
 # ---------------------------------------------------------------------
 # Specific instances:
 # (*) Harmonic + sᵏ-rule
-# αₜ = a / (1 + b*t)
+# αₜ = 1 / (a + b*t)
 # ηₛᵗ = (s+1)ᵏ / ∑ᵗ⁻¹(l+1)ᵏ
 # Cit.
 # 1) "Primal convergence from dual subgradient methods for convex optimization"
@@ -445,9 +512,9 @@ mutable struct Adadelta <: DeflectedSubgradientMethod
     ϵ # small value, typical 1e-8
 
     s # sum of squared gradients
-    u # sum od squared gradients
+    u # sum of squared gradients
     params
-    AdadeltaDescent(;γs=nothing, γx=nothing, ϵ=1e-14) = begin
+    Adadelta(;γs=nothing, γx=nothing, ϵ=1e-8) = begin
         M = new()
         @some M.γs = γs
         @some M.γx = γx
@@ -479,7 +546,7 @@ mutable struct Adam <: DeflectedSubgradientMethod
     v # 1st moment estimate
     s # 2nd moment estimate
     params
-    AdamDescent(;α=nothing, γv=nothing, γs=nothing, ϵ=1e-14) = begin
+    Adam(;α=nothing, γv=nothing, γs=nothing, ϵ=1e-14) = begin
         M = new()
         @some M.α = α
         @some M.γv = γv

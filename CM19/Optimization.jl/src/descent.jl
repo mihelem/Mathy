@@ -169,6 +169,7 @@ mutable struct ConjugateGradientDescent <: DescentMethod
     ConjugateGradientDescent() = begin
         M = new()
         M.params = Dict()
+        M
     end
 end
 function init!(M::ConjugateGradientDescent, f, ∇f, x)
