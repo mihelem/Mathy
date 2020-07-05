@@ -67,5 +67,5 @@ function parse_dmx(io::IOStream, type=Float64)
             end
         end
     end
-    E, b, l, u, q
+    E, -b, l, u, q
 end
