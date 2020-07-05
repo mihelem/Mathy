@@ -59,8 +59,20 @@ function parse_dmx(io::IOStream, type=Float64)
             elseif line[1] == 'a'
                 edge_cnt += 1
                 vars = split(line, " ")[2:end]
-                E[parse(Int64, vars[1]), edge_cnt] = -1
-                E[parse(Int64, vars[2]), edge_cnt] = 1
+                parse(Int64, vars[1]) |>
+                no -> begin
+                    if !(1≤no≤m)
+                        println(line)
+                    end
+                    E[no, edge_cnt] = -1
+                end
+                parse(Int64, vars[2]) |>
+                no -> begin
+                    if !(1≤no≤m)
+                        println(line)
+                    end
+                    E[no, edge_cnt] = 1
+                end
                 l[edge_cnt] = parse(type, vars[3])
                 u[edge_cnt] = parse(type, vars[4])
                 q[edge_cnt] = parse(type, vars[5])
