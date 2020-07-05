@@ -1,4 +1,4 @@
-# TODO: any exact "descent" (not really, it's a saddle point) method
+# TODO
 # --------------------- Primal Dual algorithm PD1 ------------------------- #
 mutable struct QMCFBPAlgorithmPD1 <: OptimizationAlgorithm{QMCFBProblem}
     localization::DescentMethod

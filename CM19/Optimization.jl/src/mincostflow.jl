@@ -77,7 +77,7 @@ function run!(solver::OptimizationSolver{QMCFBProblem}, problem::QMCFBProblem)
     run!(solver.algorithm, problem, memoranda=solver.options.memoranda)
 end
 
-# (P)D1 : Saddle Point with Descents Methods
+# (P)D1 : Saddle Point with Descent Methods
 include("algorithm/QMCFBP_PD1_D.jl")
 # D1 : Subgradient Methods - WIP
 include("algorithm/QMCFBP_D1_SG.jl")
@@ -151,20 +151,20 @@ function get_test(algorithm::OptimizationAlgorithm{QMCFBProblem};
     m::Integer=0, n::Integer=0,
     singular::Integer=0,
     active::Integer=0,
-    𝔓::Union{Nothing, QMCFBProblem}=nothing,
+    problem::Union{Nothing, QMCFBProblem}=nothing,
     should_reduce::Bool=false,
     type::DataType=Float64,)
 
-    if 𝔓 === nothing
-        𝔓 = generate_quadratic_min_cost_flow_boxed_problem(type, m, n, singular=singular, active=active)
+    if problem === nothing
+        problem = generate_quadratic_min_cost_flow_boxed_problem(type, m, n, singular=singular, active=active)
         if should_reduce == true
-            𝔓 = get_reduced(𝔓)[1]
+            problem = get_reduced(𝔓)[1]
         end
     end
 
     instance = OptimizationInstance{QMCFBProblem}()
     set!(instance,
-        problem=𝔓,
+        problem=problem,
         algorithm=algorithm,
         options=QMCFBPSolverOptions(),
         solver=OptimizationSolver{QMCFBProblem}())
@@ -261,14 +261,14 @@ end
 Return the MinCostFlow problem corresponding to the first of the connected components in which the MinCostFlow problem can be separated
 
 **Arguments**
-* `𝔓::QMCFBProblem` : Quadratic MinCostFlow Boxed Problem whose node-arc incidence matrix may represent a disconnected digraph
+* `problem::QMCFBProblem` : Quadratic MinCostFlow Boxed Problem whose node-arc incidence matrix may represent a disconnected digraph
 
 **Note**
 
 After reduction, the new incidence matrix `𝔓.E` will have dimension of the left kernel equal to 1 ≡> (1,1,...,1)
 """
-function get_reduced(𝔓::QMCFBProblem)
-    @unpack Q, q, l, u, E, b = 𝔓
+function get_reduced(problem::QMCFBProblem)
+    @unpack Q, q, l, u, E, b = problem
     P_row, P_col = get_graph_components(E)
     return [
         QMCFBProblem(
@@ -308,15 +308,15 @@ function rupl!(;
         α=nothing,
         β=nothing,
         p=nothing,
-        to_plot="norm∂L′",
+        to_plot="norm∂L_best",
         map=x->log10.(x))
    @some algorithm.subgradient.α = α
    @some algorithm.subgradient.β = β
    run!(test)
    if p === nothing
-       return plot(test.result, to_plot, "i′", mapping=map)
+       return plot(test.result, to_plot, "i_best", mapping=map)
    else
-       plot!(p, test.result, to_plot, "i′", mapping=map)
+       plot!(p, test.result, to_plot, "i_best", mapping=map)
    end
 end
 ```

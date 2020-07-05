@@ -25,25 +25,26 @@ mutable struct QMCFBPAlgorithmD1SG <: OptimizationAlgorithm{QMCFBProblem}
         heuristic_each=1) = begin
 
         algorithm = new()
+        algorithm.μ₀ = μ₀
         algorithm.stopped = false
         algorithm.L̂ = Inf
         algorithm.x̂ = nothing
         algorithm.memorabilia =
             Set([
-                "x̅",        # → X(μ) see HarmonicErgodicPrimalStep ∈ Subgradient
-                "x",        # primal coordinate
-                "μ",        # constraint dual vector
-                "L",        # Lagrangian
-                "∂L",       # ∂L ∈ subgradient L(μ)
-                "norm∂L",   # norm(∂L, Inf)
-                "x′",       # x for new best L
-                "μ′",       # μ for new best L
-                "L′",       # new best L
-                "∂L′",      # ∂L for each new best L
-                "norm∂L′",  # norm(∂L, Inf) for each new best L
-                "i′",       # iteration counter for each new best L
-                "L̂",        # upper bound by heuristic
-                "x̂"])       # primal coor. in heuristic
+                "x̅",           # → X(μ) see HarmonicErgodicPrimalStep ∈ Subgradient
+                "x",           # primal coordinate
+                "μ",           # constraint dual vector
+                "L",           # Lagrangian
+                "∂L",          # ∂L ∈ subgradient L(μ)
+                "norm∂L",      # norm(∂L, Inf)
+                "x_best",      # x for new best L
+                "μ_best",      # μ for new best L
+                "L_best",      # new best L
+                "∂L_best",     # ∂L for each new best L
+                "norm∂L_best", # norm(∂L, Inf) for each new best L
+                "i_best",      # iteration counter for each new best L
+                "L̂",           # upper bound by heuristic
+                "x̂"])          # primal coor. in heuristic
 
         set!(
             algorithm,
@@ -53,7 +54,6 @@ mutable struct QMCFBPAlgorithmD1SG <: OptimizationAlgorithm{QMCFBProblem}
             max_iter=max_iter,
             ε=ε,
             ϵ=ϵ,
-            μ₀=μ₀,
             heuristic_t=heuristic_t,
             heuristic_each=heuristic_each)
     end
@@ -80,7 +80,7 @@ function set!(algorithm::QMCFBPAlgorithmD1SG;
     @some algorithm.max_iter=max_iter
     @some algorithm.ε=ε
     @some algorithm.ϵ=ϵ
-    algorithm.μ₀=μ₀
+    @some algorithm.μ₀=μ₀
     @some algorithm.heuristic_t = heuristic_t
     @some algorithm.heuristic_each = heuristic_each
     @some algorithm.x̂ = x̂
@@ -92,7 +92,7 @@ end
 function set!(algorithm::QMCFBPAlgorithmD1SG,
     result::OptimizationResult{QMCFBProblem})
 
-    algorithm.μ₀ = result.result["μ′"]  # Try also with μ′
+    algorithm.μ₀ = result.result["μ_best"]
     if haskey(result.result, "localization")
         algorithm.localization = result.result["localization"]
         algorithm.stopped = true
@@ -107,10 +107,10 @@ function set!(algorithm::QMCFBPAlgorithmD1SG,
 end
 function run!(
     algorithm::QMCFBPAlgorithmD1SG,
-    𝔓::QMCFBProblem;
+    problem::QMCFBProblem;
     memoranda=Set([]))
 
-    @unpack Q, q, E, b, l, u = 𝔓
+    @unpack Q, q, E, b, l, u = problem
     m, n = size(E)
     Ql, Qu = Q*l, Q*u
 
@@ -126,7 +126,7 @@ function run!(
 
     @init_memoria memoranda
 
-    # Qx̃ is Qx not projected in the box
+    # Qx\tilde is Qx not projected in the box
     get_Qx̃ = μ -> -E'μ-q
     function in_box(Qx̃, Ql=Ql, Qu=Qu, ϵ=0.0)
         𝔅 = [Qx̃ .≤ Ql.+ϵ  zeros(Bool, length(Qx̃))  Qx̃ .≥ Qu.+ϵ]
@@ -171,7 +171,7 @@ function run!(
         L, ∂L = get_L(x, μ), get_∂L(x, μ)
 
         # best solution up to now
-        x′, μ′, L′, ∂L′, L̂ = copy(x), copy(μ), -Inf, copy(∂L), algorithm.L̂
+        x_best, μ_best, L_best, ∂L_best, L̂ = copy(x), copy(μ), -Inf, copy(∂L), algorithm.L̂
 
         wrapper = (func!, localization, x, μ, f_μ, f_xμ, ∂f_μ, ∂f_xμ) -> begin
             if typeof(localization) <: DualSubgradientMethod
@@ -199,9 +199,9 @@ function run!(
         if heuristic_t !== Nothing
             do_heuristic = (x) -> begin
                 if iₕ ≥ heuristic_each
-                    heuristic = heuristic_t(𝔓, x, ϵ=ϵ)
+                    heuristic = heuristic_t(problem, x, ϵ=ϵ)
                     init!(heuristic)
-                    x̂, b′ = run!(heuristic)
+                    x̂, Δ = run!(heuristic)
                     L̂ = 0.5*x̂⋅(Q╲.*x̂) + q⋅x̂
                     if algorithm.L̂ > L̂
                         algorithm.L̂ = L̂
@@ -237,23 +237,23 @@ function run!(
             @memento norm∂L = norm(∂L)
             @memento x̅ = get_x̅()
             @memento L̂ = do_heuristic(x̅!==nothing ? x̅ : x)
-            if L > L′
-                @memento L′=L
-                @memento L̂′ = L̂
-                @memento ∂L′[:]=∂L
-                @memento norm∂L′=norm∂L
-                @memento x′[:]=x
-                @memento μ′[:]=μ
-                @memento i′=i
+            if L > L_best
+                @memento L_best=L
+                @memento L̂_best = L̂
+                @memento ∂L_best[:]=∂L
+                @memento norm∂L_best=norm∂L
+                @memento x_best[:]=x
+                @memento μ_best[:]=μ
+                @memento i_best=i
             end
-            if L̂-L′ < ε
+            if L̂-L_best < ε
                 break
             end
         end
         x̅ = get_x̅()
         x̂ = algorithm.x̂
 
-        return @get_result x′ μ′ L′ ∂L′ x̅ localization L̂ x̂
+        return @get_result x_best μ_best L_best ∂L_best x̅ localization L̂ x̂
     end
 
     solve(μ₀) |> result ->

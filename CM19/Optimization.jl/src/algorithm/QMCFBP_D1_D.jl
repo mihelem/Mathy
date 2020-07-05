@@ -3,10 +3,11 @@
 QMCFBPAlgorithmD1D <: OptimizationAlgorithm{QMCFBProblem}
 ```
 
+Devised for almost nonsingular Q.
 Descent algorithm applied on the dual lagrangian obtained from equality constraints dualised.
 Since `Q` is not stricty positive definite, such dual lagrangian is continuous but not `C1`.
 In particular it is piecewise differentiable, so the solution consists in splitting the line search on the
-regions identified by edges of discontinuity of the derivative
+regions identified by edges of discontinuity of the derivative.
 
 **TODO**
 * Other line searches and descent methods
@@ -16,6 +17,7 @@ mutable struct QMCFBPAlgorithmD1D <: OptimizationAlgorithm{QMCFBProblem}
     localization::DescentMethod
     verba               # verbosity utility
     max_iter            # max number of iterations
+    max_iter_min∂       # max iterations to calculate min-norm subgradient
     ϵₘ                  # error within which an element is considered 0
     ε                   # precision to which eq. constraint is to be satisfied
     μ₀                  # starting point
@@ -28,13 +30,16 @@ mutable struct QMCFBPAlgorithmD1D <: OptimizationAlgorithm{QMCFBProblem}
         verbosity=nothing,
         my_verba=nothing,
         max_iter=nothing,
+        max_iter_min∂=1000,
         ϵₘ=nothing,
         ε=nothing,
         μ₀=nothing,
         cure_singularity=nothing,
-        plot_steps=nothing) = begin
+        plot_steps=0) = begin
 
         algorithm = new()
+        algorithm.μ₀ = μ₀
+        algorithm.plot_steps = plot_steps
         algorithm.memorabilia = Set(["L", "∂L", "norm∂L", "x", "μ", "α", "λ", "lsp", "alphas"])
 
         set!(algorithm,
@@ -42,11 +47,12 @@ mutable struct QMCFBPAlgorithmD1D <: OptimizationAlgorithm{QMCFBProblem}
             verbosity=verbosity,
             my_verba=my_verba,
             max_iter=max_iter,
+            max_iter_min∂=max_iter_min∂,
             ϵₘ=ϵₘ,
             ε=ε,
-            μ₀=μ₀,
+            μ₀=nothing,
             cure_singularity=cure_singularity,
-            plot_steps=plot_steps)
+            plot_steps=nothing)
     end
 
 end
@@ -55,11 +61,12 @@ function set!(algorithm::QMCFBPAlgorithmD1D;
     verbosity=nothing,
     my_verba=nothing,
     max_iter=nothing,
+    max_iter_min∂=nothing,
     ϵₘ=nothing,
     ε=nothing,
     μ₀=nothing,
     cure_singularity=nothing,
-    plot_steps=0)
+    plot_steps=nothing)
 
     @some algorithm.localization=localization
     if verbosity !== nothing
@@ -67,17 +74,19 @@ function set!(algorithm::QMCFBPAlgorithmD1D;
     end
     @some algorithm.verba=my_verba
     @some algorithm.max_iter=max_iter
+    @some algorithm.max_iter_min∂=max_iter_min∂
     @some algorithm.ϵₘ=ϵₘ
     @some algorithm.ε=ε
-    algorithm.μ₀=μ₀
-    @some algorithm.cure_singularity = cure_singularity
-    algorithm.plot_steps = plot_steps
+    @some algorithm.μ₀=μ₀
+    @some algorithm.cure_singularity=cure_singularity
+    @some algorithm.plot_steps=plot_steps
 
     algorithm
 end
 function set!(algorithm::QMCFBPAlgorithmD1D,
     result::OptimizationResult{QMCFBProblem})
 
+    # Be aware, no copy!
     algorithm.μ₀ = result.result["μ"]
     if haskey(result.result, "localization")
         algorithm.localization = result.result["localization"]
@@ -139,12 +148,13 @@ lt(o::Oᾱ_ϵs,
 end
 function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([]))
     @unpack Q, q, l, u, E, b, reduced = 𝔓
-    @unpack localization, verba, max_iter, ϵₘ, ε, μ₀, cure_singularity, plot_steps = algorithm
+    @unpack localization, verba, max_iter, max_iter_min∂, ϵₘ, ε, μ₀, cure_singularity, plot_steps = algorithm
     @init_memoria memoranda
 
+    val_t = eltype(Q)
     Q╲ = view(Q, [CartesianIndex(i, i) for i in 1:size(Q, 1)])
     μ = zeros(eltype(Q), size(E, 1)); @some μ[:] = μ₀
-    # reduced == true ⟹ assume E represent a connected graph
+    # reduced == true ⟹ assume E represents a connected graph
     if reduced == true
         E, b, μ = E[1:end-1, :], b[1:end-1], μ[1:end-1]
     end
@@ -166,11 +176,12 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
     * `pq₊` : priority queue with ᾱ met in the increasing part of the line search
     * `pq₋` : priority queue with ᾱ met in the decreasing part of the line search
     * `ΔQx̃` :
+    * `ᾱs`  :
 
 
     **Logic**
     Line search is split in an forward (ℙ₊) and backward search (ℙ₋), where the
-    backward search may be needed only because of approximations.
+    backward search should not be needed.
     * `Qx̃` : would be the optimal `Qx(μ)` with no box constraints
     * inward bitmap: inward = [𝔅[:, 1]  𝔅[:, 3]]
     * `Eᵀd > 0` ⟹ `Qx̃(α)` decreasing ⟹ `u ∈ ℙ₊` if inward, `l ∈ ℙ₊` if outward
@@ -217,7 +228,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         # argmin || E[:, 𝔫]*x[𝔫] + E[:, .~𝔫]*x[.~𝔫] - b ||
         # ≡ argmin || E₁*x₁ + E₀*x₀ - b ||
         # ≡ argmin ½x₁'E₁'E₁x₁ + (E₀*x₀-b)'E₁*x₁
-        𝔓₁ = MinQuadratic.MQBProblem(
+        problem₁ = MinQuadratic.MQBProblem(
             E[:, nanny]'E[:, nanny],
             E[:, nanny]'*(E[:, .~nanny]*x[.~nanny]-b),
             l[nanny],
@@ -226,17 +237,17 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         algorithm = MinQuadratic.MQBPAlgorithmPG1(
             localization=MinQuadratic.QuadraticBoxPCGDescent(),
             verbosity=-1,
-            max_iter=1000,      # TODO: set properly
-            ε=ε/√n,             # TODO: set properly
-            ϵ₀=1e-12)           # TODO: set properly
+            max_iter=max_iter_min∂,
+            ε=ε/√n,
+            ϵ₀=convert(val_t, 1e-12))           # TODO: set properly
         Optimization.set!(instance,
-            problem=𝔓₁,
+            problem=problem₁,
             algorithm=algorithm,
             options=MinQuadratic.MQBPSolverOptions(),
             solver=OptimizationSolver{MinQuadratic.MQBProblem}())
         Optimization.run!(instance)
         x[nanny] = instance.result.result["x"]
-        @show (count(.~(l[nanny] .≤ x[nanny] .≤ u[nanny])), count(.~(l .≤ x .≤ u)))
+        # @show (count(.~(l[nanny] .≤ x[nanny] .≤ u[nanny])), count(.~(l .≤ x .≤ u)))
         x
     end
     function is_primal_null_∂(l, u, Eᵀd, dᵀ∇L)
@@ -245,7 +256,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         S = -dᵀ∇L
         return Eᵀd'L̂ ≤ S ≤ Eᵀd'Û
     end
-    function line_search′(pq₊, pq₋, μ, 𝔅, Q╲, kerny, q, Eᵀd, bᵀd, Eᵀμ, l, u)
+    function line_search(pq₊, pq₋, μ, 𝔅, Q╲, kerny, q, Eᵀd, bᵀd, Eᵀμ, l, u)
         # bitmap  :  𝔏 ⟹ x is l, 𝕴 ⟹ x is in the box, 𝔘 ⟹ x is u
         @views 𝔏, 𝕴, 𝔘 = 𝔅[:, 1], 𝔅[:, 2], 𝔅[:, 3]
         Qx̃₀ = -q - Eᵀμ
@@ -263,12 +274,12 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             return (0.0, 𝔅)
         end
         pq = s>0 ? pq₊ : pq₋
-        ᾱ, outward, p = 0.0, false, CartesianIndex(0,0)
+        ᾱ, outward, p = convert(val_t, 0.0), false, CartesianIndex(0,0)
         while length(pq) > 0
             next_ᾱ, next_outward, next_p = peek(pq)[2];
             # verba(1, "\nnext_ᾱ = $next_ᾱ")
             if filter_ᾱ(next_p, next_outward, 𝔅) == false
-                println("WARNING: filtered an ᾱ")
+                verba(1, "WARNING: filtered an ᾱ")
                 dequeue!(pq)
                 continue
             end
@@ -276,7 +287,6 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
                 nanny = 𝕴 .& kerny
                 if any(nanny)
                     if is_primal_null_∂(l[nanny], u[nanny], Eᵀd[nanny], get_dᵀ∇L₀())
-                        println("is_primal_null = true")
                         return (ᾱ, 𝔅)
                     end
                 else
@@ -305,7 +315,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             dequeue!(pq)
         end
     end
-    function step′(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny; ϵ=ϵₘ, ϵₘ=ϵₘ)
+    function step(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny; ϵ=ϵₘ, ϵₘ=ϵₘ)
         Eᵀμ = E'μ
         𝔅 = zeros(Bool, length(x), 3)
         Qx̃ = -Eᵀμ-q; x̃ = Qx̃ ./ Q╲
@@ -326,7 +336,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         # println("dᵀ∇L = $dᵀ∇L")
 
         α, next_𝔅′ =
-            line_search′(pq₊, pq₋, μ, 𝔅′, Q╲′, kerny′, q′, Eᵀd′, bᵀd, Eᵀμ′, l′, u′)
+            line_search(pq₊, pq₋, μ, 𝔅′, Q╲′, kerny′, q′, Eᵀd′, bᵀd, Eᵀμ′, l′, u′)
 
         next_μ = μ + α*d.*𝔐μ
         next_𝔅 = copy(𝔅)
@@ -343,11 +353,11 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         end
         return next_x, next_μ, next_𝔅, ᾱs
     end
-    function inexact_step′(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny; ϵ=ϵₘ, ϵₘ=ϵₘ)
+    function inexact_step(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny; ϵ=ϵₘ, ϵₘ=ϵₘ)
         function get_x(μ, Eᵀμ)
             unkerny = .~kerny
             Qx̃ = -E'μ-q
-            x′ = Array{eltype(Q)}(undef, length(x))
+            x′ = Array{val_t}(undef, length(x))
             x′[unkerny] = min.(max.(Qx̃[unkerny] ./ Q╲[unkerny], l[unkerny]), u[unkerny])
             x′[kerny] = u[kerny].*(Qx̃[kerny].≥0.0) + l[kerny].*(Qx̃[kerny].<0.0)
             x′
@@ -392,17 +402,17 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         end
         L_best = x′⋅(0.5*Q╲.*x′ + q) + Eᵀμ⋅x′ - μ'b
         if L_best < L′
-            @show (L_best, L′)
+            @show (L_best, L′) # DEBUG: REMOVE
         end
 
         return x′, μ′, L_best, 𝔅
     end
     # TODO: ϵ₀
-    function solve′(μ, Q╲, q, E, b; max_iter=max_iter, ε=ε, ϵ₀=ϵₘ*ϵₘ, ϵₘ=ϵₘ)
+    function solve(μ, Q╲, q, E, b; max_iter=max_iter, ε=ε, ϵ₀=ϵₘ*ϵₘ, ϵₘ=ϵₘ)
         Ql, Qu = Q╲.*l, Q╲.*u
         kerny₀ = simeq.(Q╲, 0.0, ϵ₀)
 
-        λ_rate = 1.3
+        λ_rate = convert(val_t, 1.3)
         update_λ = begin
             if cure_singularity
                 (λ, r, err) -> begin
@@ -416,7 +426,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
                     λ′
                 end
             else
-                (λ, r, err) -> 0.0
+                (λ, r, err) -> convert(val_t, 0.0)
             end
         end
         λ_min = minimum([Q╲[.~kerny₀]; 1.0])
@@ -470,7 +480,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             end
             @memento λ = update_λ(λ, λ_rate, norm∂L)
 
-            x′, μ′, 𝔅′, ᾱs = step′(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny, ϵ=ϵₘ, ϵₘ=ϵₘ)
+            x′, μ′, 𝔅′, ᾱs = step(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny, ϵ=ϵₘ, ϵₘ=ϵₘ)
             #𝔅_wrong = check(μ′, 𝔅′)
             #if any(𝔅_wrong)
             #    println("wrong 𝔅/kerny_null: ", count(𝔅_wrong), count(kerny .& 𝔅′[:, 2]))
@@ -481,7 +491,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             if L′ < L
                 #println("Previous Broken : $L′ < $L")
                 d[:] = ∂L
-                x′, μ′, 𝔅′, ᾱs′ = step′(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny, ϵ=ϵₘ, ϵₘ=ϵₘ)
+                x′, μ′, 𝔅′, ᾱs′ = step(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny, ϵ=ϵₘ, ϵₘ=ϵₘ)
                 #𝔅_wrong = check(μ′, 𝔅′)
                 #if any(𝔅_wrong)
                 #    println("Inside: wrong 𝔅/kerny_null: ", count(𝔅_wrong), "/", count(kerny .& 𝔅′[:, 2]))
@@ -495,7 +505,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
                     @memento lsp = draw_line_search(μ, d, minimum(ᾱs′), maximum(ᾱs′), plot_steps)
                     @memento alphas = [ᾱs′ (α->get_L(μ + α*d)).(ᾱs′)]
 
-                    x′, μ′, L′, 𝔅′ = inexact_step′(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny, ϵ=ϵₘ, ϵₘ=ϵₘ)
+                    x′, μ′, L′, 𝔅′ = inexact_step(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny, ϵ=ϵₘ, ϵₘ=ϵₘ)
                     ∂L′[:] = E*x′-b
                 end
             end
@@ -511,6 +521,6 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         return @get_result x μ ∂L L λ localization
     end
 
-    return solve′(μ, Q╲, q, E, b) |>
+    return solve(μ, Q╲, q, E, b) |>
         (result -> OptimizationResult{QMCFBProblem}(memoria=@get_memoria, result=result))
 end

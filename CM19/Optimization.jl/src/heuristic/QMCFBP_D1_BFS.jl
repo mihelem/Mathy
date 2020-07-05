@@ -10,9 +10,9 @@ algorithm = QMCFBPAlgorithmD1SG(
           ε=1e-6,
           ϵ=1e-12);
 test = get_test(algorithm, m=15, n=30, singular=8);
-test.solver.options.memoranda = Set(["norm∂L′", "L′","i′"])
+test.solver.options.memoranda = Set(["norm∂L_best", "L_best","i_best"])
 run!(test)
-x = test.result.result["x′"]
+x = test.result.result["x_best"]
 𝔓 = test.problem; Q, q, l, u, E, b = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b);
 heu = BFSHeuristic(𝔓, x)
 init!(heu)
@@ -101,7 +101,9 @@ function run!(H::BFSHeuristic)
         # println("flux: $flux => b′[$sink] -= $flux,  b′[$node] += $flux")
     end
     for i::Ti in 1:length(b)
-        while b′[i] <  -ϵ
+        flown = true
+        while flown && (b′[i] < -ϵ)
+            flown = false
             parent[i] = (0, 0, i)
             sinks = Ti[]
             visited = zeros(Bool, length(b′))
@@ -112,11 +114,12 @@ function run!(H::BFSHeuristic)
                 node = dequeue!(bfs_queue)
                 fanio = get_fanio(node)
                 for (edge, io, node′) in fanio
-                    if (visited[node′] == false) && (get_max_flux(edge, io) > ϵ)
+                    if (visited[node′] == false) && (get_max_flux(edge, io) > 0.0)
                         visited[node′] = true
                         enqueue!(bfs_queue, node′)
                         parent[node′] = (edge, io, node)
-                        if b′[node′] > ϵ
+                        if b′[node′] > 0.0
+                            flown = true
                             push!(sinks, node′)     # Or just augment the path here...
                         end
                     end

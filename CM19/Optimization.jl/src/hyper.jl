@@ -17,7 +17,7 @@ searcher = NelderMead()
 halgorithm = WithParameterSearch{QMCFBProblem, typeof(algorithm), NelderMead}(
     algorithm=algorithm,
     searcher=searcher,
-    objective="L′",
+    objective="L_best",
     cmp=(a, b)->a>b,
     searcher_iter=30,
     algorithm_iter=10000,
@@ -25,7 +25,7 @@ halgorithm = WithParameterSearch{QMCFBProblem, typeof(algorithm), NelderMead}(
     δ=0.2,
     param_ranges=Dict(:a=>[1e-8, 1.0], :b=>[1e-8, 1.0]))
 test = get_test(halgorithm, m=200, n=300, singular=10)
-test.solver.options.memoranda = Set(["norm∂L′", "L′", "params_best", "result_best"])
+test.solver.options.memoranda = Set(["norm∂L_best", "L_best", "params_best", "result_best"])
 run!(test)
 
 ```
@@ -139,7 +139,8 @@ function run!(
     function gen_f(algorithm, iter)
         function f(params_v′)
             algorithm′ = deepcopy(algorithm)
-            set_params!(algorithm′, Dict(zip(params_k, params_v′))); println("imposto $(params_v′)")
+            set_params!(algorithm′, Dict(zip(params_k, params_v′)))
+            println("Setting $(params_k) = $(params_v′)")
             algorithm′.max_iter = iter
             # TODO: memoria
             # TODO: verbosity
@@ -239,9 +240,9 @@ end # end module Hyper
 using Optimization; subgradient = Subgradient.HarmonicErgodicPrimalStep(k=4, a=0.01, b=0.1);
 algorithm = QMCFBPAlgorithmD1SG(localization=subgradient, verbosity=1, max_iter=1000, ε=1e-6, ϵ=1e-12);
 searcher = NelderMead();
-halgorithm = WithParameterSearch{QMCFBProblem, typeof(algorithm), NelderMead}(algorithm=algorithm, searcher=searcher, objective="L′", cmp=(a, b)->a>b, searcher_iter=30, algorithm_iter=10000, algorithm_iter_per_search=500, δ=0.5, fixed_params=[:k=>4], param_ranges=Dict(:a=>[1e-8, 1.0], :b=>[1e-8, 1.0]));
+halgorithm = WithParameterSearch{QMCFBProblem, typeof(algorithm), NelderMead}(algorithm=algorithm, searcher=searcher, objective="L_best", cmp=(a, b)->a>b, searcher_iter=30, algorithm_iter=10000, algorithm_iter_per_search=500, δ=0.5, fixed_params=[:k=>4], param_ranges=Dict(:a=>[1e-8, 1.0], :b=>[1e-8, 1.0]));
 test = get_test(halgorithm, m=200, n=300, singular=10);
-test.solver.options.memoranda = Set(["norm∂L′", "L′", "params_best", "result_best"]);
+test.solver.options.memoranda = Set(["norm∂L_best", "L_best", "params_best", "result_best"]);
 run!(test);
 plot(Dict{Symbol, Float64}.(test.result.memoria["params_best"]))
 

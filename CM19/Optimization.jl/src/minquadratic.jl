@@ -109,7 +109,7 @@ end
 
 """
 ```julia
-get_test(algorithm; n, singular=0, active=0, 𝔓=nothing, type=Float64)
+get_test(algorithm; n, singular=0, active=0, problem=nothing, type=Float64)
 ```
 
 Prepare a test for a Quadratic Boxed Problem solver algorithm.
@@ -126,7 +126,7 @@ Prepare a test for a Quadratic Boxed Problem solver algorithm.
 * `n :: Integer` : dimension of the problem (e.g. `size(Q) = [n, n]`)
 * `singular :: Integer` : dimension of `ker(Q)`
 * `active :: Integer` : (heuristic) count of the probable active sets of the solution
-* `𝔓 :: Union{Nothing, MQBProblem}` : problem; if `nothing` is given, it is randomly generated
+* `problem :: Union{Nothing, MQBProblem}` : problem; if `nothing` is given, it is randomly generated
 * `type :: DataType` : type to be used for `eltype` of the arrays of the problem
 
 **Example**
@@ -142,16 +142,16 @@ function get_test(algorithm::OptimizationAlgorithm{MQBProblem};
     n::Integer,
     singular::Integer=0,
     active::Integer=0,
-    𝔓::Union{Nothing, MQBProblem}=nothing,
+    problem::Union{Nothing, MQBProblem}=nothing,
     type::DataType=Float64)
 
-    if 𝔓 === nothing
-        𝔓 = generate_quadratic_boxed_problem(type, n, active=active, singular=singular)
+    if problem === nothing
+        problem = generate_quadratic_boxed_problem(type, n, active=active, singular=singular)
     end
 
     instance = OptimizationInstance{MQBProblem}()
     Optimization.set!(instance,
-        problem=𝔓,
+        problem=problem,
         algorithm=algorithm,
         options=MQBPSolverOptions(),
         solver=OptimizationSolver{MQBProblem}())

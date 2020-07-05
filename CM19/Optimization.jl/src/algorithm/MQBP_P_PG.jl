@@ -4,7 +4,8 @@ mutable struct QuadraticBoxPCGDescent <: DescentMethod end
 mutable struct MQBPAlgorithmPG1 <: OptimizationAlgorithm{MQBProblem}
     localization::DescentMethod      #
     verba                       # verbosity utility
-    max_iter                    #
+    max_iter                    # max long search iterations
+    max_iter_local              # max iterations per local search
     ε                           # required: norm(∇f, ?) < ε
     ϵ₀                          # abs error to which inequalities are satisfied
     x₀                          # starting point
@@ -15,6 +16,7 @@ mutable struct MQBPAlgorithmPG1 <: OptimizationAlgorithm{MQBProblem}
         verbosity=nothing,
         my_verba=nothing,
         max_iter=nothing,
+        max_iter_local=100,
         ε=nothing,
         ϵ₀=nothing,
         x₀=nothing) = begin
@@ -26,6 +28,7 @@ mutable struct MQBPAlgorithmPG1 <: OptimizationAlgorithm{MQBProblem}
             verbosity=verbosity,
             my_verba=my_verba,
             max_iter=max_iter,
+            max_iter_local=max_iter_local,
             ε=ε,
             ϵ₀=ϵ₀,
             x₀=x₀)
@@ -36,6 +39,7 @@ function set!(algorithm::MQBPAlgorithmPG1;
     verbosity=nothing,
     my_verba=nothing,
     max_iter=nothing,
+    max_iter_local=nothing,
     ε=nothing,
     ϵ₀=nothing,
     x₀=nothing)
@@ -46,6 +50,7 @@ function set!(algorithm::MQBPAlgorithmPG1;
     end
     @some algorithm.verba = my_verba
     @some algorithm.max_iter = max_iter
+    @some algorithm.max_iter_local = max_iter_local
     @some algorithm.ε = ε
     @some algorithm.ϵ₀ = ϵ₀
     algorithm.x₀ = x₀
@@ -63,7 +68,7 @@ function set!(algorithm::MQBPAlgorithmPG1,
 end
 function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
     @unpack Q, q, l, u = 𝔓
-    @unpack localization, max_iter, verba, ε, ϵ₀, x₀ = algorithm
+    @unpack localization, max_iter, max_iter_local, verba, ε, ϵ₀, x₀ = algorithm
     @init_memoria memoranda
 
     x = (x₀ === nothing) ? 0.5*(l+u) : x₀
@@ -103,13 +108,13 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
     # assuming a valid  l .≤ x .≤ u
 
     # ----------- Simpler Approach ----------- #
-    function get_Δx′(x, d, l, u)
+    function get_Δx(x, d, l, u)
         Δx = -x
         (d .> 0.0) |> (inc -> Δx[inc] += u[inc])
         (d .< 0.0) |> (dec -> Δx[dec] += l[dec])
         Δx
     end
-    function line_search′(pq::PriorityQueue, x, Δx, d, Q, q, Qx)
+    function line_search(pq::PriorityQueue, x, Δx, d, Q, q, Qx)
         𝔐 = .~zeros(Bool, length(x))                             # 𝔐 :: \frakM : moving coordinates
         Δ1 = d.*q + d.*Qx
         dQ = d.*Q
@@ -139,7 +144,7 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
 
         return (x′, 𝔐)
     end
-    function local_search′(x, Q, q, l, u, max_iter, stop_on_cross=true)
+    function local_search(x, Q, q, l, u, max_iter, stop_on_cross=true)
         x′ = copy(x)
 
         g′, g = Q*x+q, zeros(eltype(x), length(x)) .+ Inf
@@ -154,11 +159,11 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
                 break
             end
 
-            ᾱ = minimum(get_Δx′(x′[𝔐], d[𝔐], l[𝔐], u[𝔐]) ./ d[𝔐])
+            ᾱ = minimum(get_Δx(x′[𝔐], d[𝔐], l[𝔐], u[𝔐]) ./ d[𝔐])
             Δα = (d[𝔐]'q[𝔐] + d[𝔐]'Q[𝔐, :]*x′, d'Q*d)
             α = - Δα[1] / Δα[2]
             if Δα[1] ≥ 0.0
-                verba(1, "local_search′ : something went wrong, I feel stiff")
+                verba(1, "local_search : something went wrong, I feel stiff")
             elseif α ≤ ᾱ
                 x′[𝔐] += α*d[𝔐]
             else
@@ -175,15 +180,15 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
 
         return x′
     end
-    function step′(x, d, Q, q, l, u)
+    function step(x, d, Q, q, l, u)
         𝔐 = (ΠT(d, x, l, u) .& .~((d / norm(d, Inf)) .≃ 0.0))      # 𝔐 :: \frakM : moving coordinates
         x′, d′, l′, u′, Q′, q′ = x[𝔐], d[𝔐], l[𝔐], u[𝔐], Q[𝔐, 𝔐], q[𝔐]
 
-        Δx′ = get_Δx′(x′, d′, l′, u′)
+        Δx′ = get_Δx(x′, d′, l′, u′)
         ᾱs = Δx′ ./ d′
         pq = PriorityQueue(zip([1:length(𝔐)+1;], [ᾱs; Inf]))
 
-        x′, 𝔐′ = line_search′(pq, x′, Δx′, d′, Q′, q′, Q[𝔐, :]*x)
+        x′, 𝔐′ = line_search(pq, x′, Δx′, d′, Q′, q′, Q[𝔐, :]*x)
         x[𝔐] = x′
         if any(𝔐′)
             𝔐′ = begin
@@ -191,7 +196,14 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
                 temp[𝔐][.~𝔐′] .= false
                 temp
             end
-            x[𝔐′] = local_search′(x[𝔐′], Q[𝔐′, 𝔐′], q[𝔐′] + Q[𝔐′, .~𝔐′]*x[.~𝔐′], l[𝔐′], u[𝔐′], 100, false)
+            x[𝔐′] = local_search(
+                x[𝔐′],
+                Q[𝔐′, 𝔐′],
+                q[𝔐′] + Q[𝔐′, .~𝔐′]*x[.~𝔐′],
+                l[𝔐′],
+                u[𝔐′],
+                max_iter_local,
+                false)
         end
         return x
     end
@@ -214,10 +226,17 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
             end
 
             if typeof(localization) !== QuadraticBoxPCGDescent
-                @memento x[:] = get_Πx(step!(localization, x -> get_Πf(x, l, u), x -> get_Π∇f(x, Q, q, l, u), x), l, u)
+                @memento x[:] = get_Πx(
+                    step!(
+                        localization,
+                        x -> get_Πf(x, l, u),
+                        x -> get_Π∇f(x, Q, q, l, u),
+                        x),
+                    l,
+                    u)
                 @memento Π∇f[:] = get_Π∇f(x, Q, q, l, u)
             else
-                @memento x[:] = get_Πx(step′(x, d, Q, q, l, u), l, u)
+                @memento x[:] = get_Πx(step(x, d, Q, q, l, u), l, u)
                 g′ = get_∇f(x, Q, q)
                 @memento Π∇f[:] = -ΠT!(-g′, x, l, u)
                 @memento β = g′⋅(g′-g) / g⋅g
@@ -239,7 +258,7 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
     end
 
     solve(localization, x, Q, q, l, u)
-    # x = local_search′(x, Q, q, l, u, max_iter, false)
+    # x = local_search(x, Q, q, l, u, max_iter, false)
     # result = @get_result x
     # OptimizationResult{MQBProblem}(memoria=@get_memoria, result=result)
 end

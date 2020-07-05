@@ -175,10 +175,10 @@ function step!(M::PolyakStepSize, f, ∂f, x)
 end
 
 mutable struct TargetLevelPolyakStepSize <: SubgradientMethod
-    β
-    δ
-    ρ
-    R
+    β   # step factor
+    δ   # target threshold
+    ρ   # decay of δ
+    R   # 
     f_opt
     f_target
     get_f_target
