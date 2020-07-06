@@ -7,7 +7,7 @@
 # pyplot() #Must first select some backend
 # pread = Plots.hdf5plot_read("plotsave.hdf5")
 # display(pread)
-using Optimization, Parameters, Plots, LinearAlgebra
+using Optimization, Parameters, Plots, LinearAlgebra, Printf
 hdf5()
 
 include("../nljumpy.jl")
@@ -103,6 +103,9 @@ function dir_read_run_restarted(path::String, savepath::String;
                     max_restart=max_restart)
             catch e
                 println("Error in $filename")
+                open("error.log", "a") do io
+                    println(io, "$filename")
+                end
                 return
             end
         @unpack Q, q, l, u, E, b = problem
@@ -126,4 +129,74 @@ function dir_read_run_restarted(path::String, savepath::String;
         end
     end
     elaborate.(filenames)
+end
+
+function move_used_data(from::String, to::String, result::String)
+    from, to, result =
+        (s -> (length(s)>0 && s[end]!='/') ? s*"/" : s).((from, to, result))
+
+    from_f = readdir(from)
+    result_f = readdir(result)
+
+    for file in from_f
+        if any(startswith.(result_f, file[1:end-4]))
+            try
+                s, d = from*file, to*file
+                mv(s, d)
+                println(s, " → ", d)
+            catch e
+                s, d = from*file, to*file*string(stat(from*file).mtime)
+                mv(s, d)
+                println(s, " → ", d)
+            end
+        end
+    end
+end
+
+function latex_table_from_results(result::String, to::String)
+    result = (s -> (length(s)>0 && s[end]!='/') ? s*"/" : s)(result)
+    results = [file for file in readdir(result) if endswith(file, ".log")]
+    if length(results) == 0
+        return
+    end
+    open(to, "a") do ioa
+        println(ioa, "\\begin{center}")
+        println(ioa, "\\begin{longtable}{|l || c | c | c | c | r|}")
+        println(ioa, "\\hline")
+        println(ioa,
+            "Input & ",
+            "\$\\frac{L_{ub}^{Ipopt}-L_{lb}}{\\left | L_{ub}^{Ipopt} \\right |}\$ & ",
+            "\$\\left\\lVert Ex_{ub}^{Ipopt} - b \\right\\rVert\$ & ",
+            "\$\\frac{L_{ub}^{\\min\\left\\lVert \\partial L \\right\\rVert}-L_{lb}}{\\left | L_{ub}^{\\min\\left\\lVert \\partial L \\right\\rVert} \\right |}\$ &",
+            "\$\\left\\lVert Ex_{ub}^{\\min\\left\\lVert \\partial L \\right\\rVert} - b\\right\\rVert \$ & ",
+            "count \\\\")
+        println(ioa, "\\hline\\hline")
+
+        for file in results
+            println("Opening $(result*file)")
+            open(result*file, "r") do ior
+                while !eof(ior)
+                    if startswith(readline(ior), "result")
+                        words = split(readline(ior), " ")
+                        # i is[i] Ls[i] L_ub_Ipopt normsgL_ub_Ipopt L_ub_minsg normsgL_ub_minsg
+                        i, i_best, L_best, L_ub_Ipopt, normsgL_ub_Ipopt, L_ub_minsg, normsgL_ub_minsg =
+                            (j -> parse([Int64, Int64, Float64, Float64, Float64, Float64, Float64][j], words[j])).([1:length(words);])
+                        print(ioa, "\\texttt{", file[1:end-4], "} & ")
+                        (w -> print(ioa, "\$", w, "\$ & ")).(
+                            [@sprintf("%.1e", sign(L_ub_Ipopt)-L_best/abs(L_ub_Ipopt)),
+                             @sprintf("%.1e", normsgL_ub_Ipopt),
+                             @sprintf("%.1e", sign(L_ub_minsg)-L_best/abs(L_ub_minsg)),
+                             @sprintf("%.1e", normsgL_ub_minsg)
+                            ])
+                        println(ioa, "\$", i_best, "\$ \\\\")
+                        println(ioa, "\\hline")
+                    end
+                end
+            end
+        end
+        println(ioa, "\\caption{Nesterov Restarted on instances from MCF}")
+        println(ioa, "\\label{ltb:NesterovRestartedDIMACS}")
+        println(ioa, "\\end{longtable}")
+        println(ioa, "\\end{center}")
+    end
 end
