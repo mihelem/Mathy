@@ -153,7 +153,10 @@ function move_used_data(from::String, to::String, result::String)
     end
 end
 
-function latex_table_from_results(result::String, to::String)
+function latex_table_from_results(result::String, to::String;
+    caption::String="",
+    label::String="")
+
     result = (s -> (length(s)>0 && s[end]!='/') ? s*"/" : s)(result)
     results = [file for file in readdir(result) if endswith(file, ".log")]
     if length(results) == 0
@@ -194,8 +197,14 @@ function latex_table_from_results(result::String, to::String)
                 end
             end
         end
-        println(ioa, "\\caption{Nesterov Restarted on instances from MCF}")
-        println(ioa, "\\label{ltb:NesterovRestartedDIMACS}")
+        #println(ioa, "\\caption{Nesterov Restarted on instances from MCF}")
+        #println(ioa, "\\label{ltb:NesterovRestartedDIMACS}")
+        if caption != ""
+            println(ioa, "\\caption{$caption}")
+        end
+        if label != ""
+            println(ioa, "\\label{$label}")
+        end
         println(ioa, "\\end{longtable}")
         println(ioa, "\\end{center}")
     end
