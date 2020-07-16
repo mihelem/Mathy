@@ -95,6 +95,8 @@ include("algorithm/QMCFBP_D3_D.jl")
 # subgradient method alone exploiting the alternating projection algorithm
 # A network specific solution should be more effective.
 include("heuristic/QMCFBP_D1_BFS.jl")
+# Edmond Karp
+include("heuristic/QMCFBP_D1_EK.jl")
 
 # -------------- Quadratic Min Cost Flow Boxed Problem Generator ----------
 function generate_quadratic_min_cost_flow_boxed_problem(
@@ -295,6 +297,7 @@ export  run!,
         QMCFBPAlgorithmD1SG,
         QMCFBPAlgorithmPD1D,
         BFSHeuristic,
+        EKHeuristic,
         QMCFBPSolverOptions,
         MinCostFlowProblem
 end     # end of module MinCostFlow
