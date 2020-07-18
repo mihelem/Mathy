@@ -15,7 +15,7 @@ mutable struct EKHeuristic <: Heuristic
     x
     EKHeuristic(problem::QMCFBProblem, x; ϵ=0.0) =
         new(problem.E,
-            sparse(Array(problem.E')),
+            SparseMatrixCSC(problem.E'),
             problem.b-problem.E*x,
             problem.l-x,
             problem.u-x,
@@ -90,7 +90,6 @@ function run!(H::EKHeuristic)
     sinks = Ti[]
     while flown && length(sources)>0
         flown = false
-        sinks = Ti[]
         visited[sources] .= true
         for source in sources
             parent[source] = (0, 0, source)

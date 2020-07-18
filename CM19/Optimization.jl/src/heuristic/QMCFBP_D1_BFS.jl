@@ -36,7 +36,7 @@ mutable struct BFSHeuristic <: Heuristic
     x
     BFSHeuristic(𝔓::QMCFBProblem, x; ϵ=0.0) =
         new(𝔓.E,
-            sparse(Array(𝔓.E')),
+            SparseMatrixCSC(𝔓.E'),
             𝔓.b-𝔓.E*x,
             𝔓.l-x,
             𝔓.u-x,

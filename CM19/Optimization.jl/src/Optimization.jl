@@ -345,8 +345,6 @@ export  run!,
         QMCFBPAlgorithmD2D,
         QMCFBPAlgorithmD1D,
         QMCFBPAlgorithmD1SG,
-        BFSHeuristic,
-        EKHeuristic,
         QMCFBPAlgorithmPD1D,
         QMCFBPSolverOptions,
         MinCostFlowProblem

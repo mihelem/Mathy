@@ -97,6 +97,8 @@ include("algorithm/QMCFBP_D3_D.jl")
 include("heuristic/QMCFBP_D1_BFS.jl")
 # Edmond Karp
 include("heuristic/QMCFBP_D1_EK.jl")
+# Shortest Path in Edmond Karp ≡ Min Cost Max Flow
+include("heuristic/QMCFBP_D1_SPEK.jl")
 
 # -------------- Quadratic Min Cost Flow Boxed Problem Generator ----------
 function generate_quadratic_min_cost_flow_boxed_problem(
@@ -296,8 +298,6 @@ export  run!,
         QMCFBPAlgorithmD1D,
         QMCFBPAlgorithmD1SG,
         QMCFBPAlgorithmPD1D,
-        BFSHeuristic,
-        EKHeuristic,
         QMCFBPSolverOptions,
         MinCostFlowProblem
 end     # end of module MinCostFlow
