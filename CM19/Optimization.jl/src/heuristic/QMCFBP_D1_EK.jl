@@ -33,6 +33,7 @@ function run!(H::EKHeuristic)
     @unpack E, Eᵀ, b, l, u, x₀, x, ϵ = H
     b′ = copy(b)                # we'll bring b to 0
     Ti = eltype(E.rowval)       # index type
+    m, n = size(E)
 
     # fan = rowvals(Eᵀ)           # incident arcs
     # io = nonzeros(Eᵀ)           # 1, -1 = in, out
@@ -88,7 +89,10 @@ function run!(H::EKHeuristic)
     bfs_q1, bfs_q2 = Queue{Ti}(), Queue{Ti}()
     visited = zeros(Bool, length(b′))
     sinks = Ti[]
-    while flown && length(sources)>0
+    for i in 1:m*n
+        if !(flown && length(sources)>0)
+            break
+        end
         flown = false
         visited[sources] .= true
         for source in sources

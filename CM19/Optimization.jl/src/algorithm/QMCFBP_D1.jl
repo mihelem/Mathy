@@ -36,7 +36,7 @@ function primal_from_dual(problem::QMCFBProblem, μ;
         solver=OptimizationSolver{MinQuadratic.MQBProblem}())
     Optimization.run!(instance)
     x[nanny] = instance.result.result["x"]
-    @show count(.~(l .≤ x .≤ u))
+    #@show count(.~(l .≤ x .≤ u))
     x
 end
 """

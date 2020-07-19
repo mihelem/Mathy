@@ -39,6 +39,7 @@ function run!(H::SPEKHeuristic)
     m, n = size(E)
     b′ = copy(b)                # we'll move b′toward 0
     Ti = eltype(E.rowval)       # index type
+    c1 = sum(abs.(c))
 
     # fan = rowvals(Eᵀ)           # incident arcs
     # io = nonzeros(Eᵀ)           # 1, -1 = in, out
@@ -114,9 +115,13 @@ function run!(H::SPEKHeuristic)
                 return
             end
             dist_avg = dist_sum / length(visit_d)
-            while first(visit_d) < dist_avg
+            for i in 1:length(visit_d)
+                if first(visit_d) ≥ dist_avg
+                    return
+                end
                 push!(visit_d, popfirst!(visit_d))
             end
+            dist_sum = sum(visit_d)
         end
 
         fill!(in_queue, false)
@@ -127,20 +132,21 @@ function run!(H::SPEKHeuristic)
         distances[sources] .= 0
         parent[sources] .= (source->(0, 0, source)).(sources)
         while length(visit_d)>0
+            #print("|")
             node = pop_node()
             fanio = get_fanio(node)
             distance = distances[node]
             for (edge, io, node′) in fanio
                 if get_max_flux(edge, io) > 0.0
                     distance′ = distance - io*c[edge]
-                    if distance′+ϵₚ < distances[node′]
+                    if distance′+ϵₚ*c1 < distances[node′]
                         parent[node′] = (edge, io, node)
+                        if (visit_count[node′] += 1) > m
+                            error("Negative Cycle: $parent\n$distances")
+                        end
                         if in_queue[node′]
                             update_node(node′, distance′)
                         else
-                            if (visit_count[node′] += 1) > m
-                                error("Negative Cycle: $parent\n$distances")
-                            end
                             distances[node′] = distance′
                             add_node(node′)
                         end
@@ -149,6 +155,7 @@ function run!(H::SPEKHeuristic)
                 end
             end
         end
+        #println()
         visit_count .= 0
     end
 
@@ -160,7 +167,10 @@ function run!(H::SPEKHeuristic)
 
     sources = findall(b′ .< -ϵ)
     flown = true
-    while flown && length(sources)>0
+    for i in 1:m*n
+        if !(flown && length(sources)>0)
+            break
+        end
         flown = false
 
         get_dist!(distances, sources, visit_d, in_queue, parent, visit_count)
@@ -170,7 +180,9 @@ function run!(H::SPEKHeuristic)
         if length(sinks) > 0
             if strict
                 sink = sinks[argmin(distances[sinks])]
-                flow_flux!(sink, get_max_flux(sink))
+                flux = get_max_flux(sink)
+                flow_flux!(sink, flux)
+                #println("flux -> $sink: $flux")
             else
                 (sink->flow_flux!(sink, get_max_flux(sink))).(sinks)
             end
