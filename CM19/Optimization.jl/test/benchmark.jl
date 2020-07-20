@@ -84,7 +84,7 @@ Base.show(io::IO, result::BenchResult{V}) where{V} = begin
 end
 function legenda(io::IO, ::Type{BenchResult{V}}) where {V}
     names = fieldnames(BenchResult{V})
-    for name in fieldnames(BenchResult{V})[1:end-1]
+    for name in names[1:end-1]
         print(io, name, " ")
     end
     println(io, names[end])
@@ -288,6 +288,7 @@ function run_bench(::Type{V}, m, n, singular, active;
     # benchmark strict SPEKHeuristic (after Ipopt)
     println("Ipopt_SPEK")
     try
+        error("Ipopt_SPEK : SKIP")
         bm = @benchmark (
             $(cache)["Ipopt_SPEK"] =
                 Optimization.MinCostFlow.SPEKHeuristic($(problem), $(Q)*$(cache)["x_Ipopt"]+$(q), $(cache)["x_Ipopt"]; ϵ=1e-14, ϵₚ=1e-10) |>
@@ -314,6 +315,7 @@ function run_bench(::Type{V}, m, n, singular, active;
     # benchmark SPEKHeuristic (after min-norm ϵ-subgradient)
     println("Ipopt_SPEKn")
     try
+        error("Ipopt_SPEKn : SKIP")
         bm = @benchmark (
             $(cache)["Ipopt_SPEKn"] =
                 Optimization.MinCostFlow.SPEKHeuristic($(problem), $(Q)*$(cache)["x_Ipopt"]+$(q), $(cache)["x_Ipopt"]; ϵ=1e-14, ϵₚ=1e-10, strict=false) |>
