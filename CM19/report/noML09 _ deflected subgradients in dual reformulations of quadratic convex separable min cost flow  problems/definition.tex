@@ -1,0 +1,162 @@
+% This is a macro definition (version from 2016 Feb. 17) for a LaTeX template 
+% for preparing documents for All-Russian Scientific Conference 
+% of the Mathematical Modeling and Boundary Value Problems 
+% [Matem. Mod. Kraev. Zadachi, Samara, Russian Federation]. 
+%
+% It was submitted by an author writing for 
+% the 10th All-Russian Scientific Conference with 
+% international participation (MMiKZ’16).
+%
+% Author: Mikhail N. Saushkin (msaushkin@gmail.com)
+% License:  LaTeX Project Public License (LPPL) 
+% <http://latex-project.org/lppl/>
+
+% Dear authors of the MMiKZ’16 Conference, please do not make changes into this file.
+
+\usepackage[a5paper, mag=1000, left=1.5cm, right=1.5cm, top=1cm, bottom=2cm, headsep=0.7cm, footskip=1cm]{geometry}
+\usepackage{ifthen}
+\usepackage{xcolor}
+\usepackage{amsbib}
+\usepackage{amsmath}
+\usepackage{amssymb}
+%\usepackage[colorlinks]{hyperref} 
+% this package can by loaded in the amsbib package
+\usepackage{nccfancyhdr}
+\usepackage{mathtools}
+\mathtoolsset{showonlyrefs}
+\usepackage{epstopdf}
+\usepackage[sort,compress]{cite}
+%\usepackage{textcase} 
+% this does not work with an utfx inputenc codepage for cyrillic letters
+
+\makeatletter\@logosfalse\makeatother % we don't show amsbib package logos
+
+\pagestyle{fancy}
+\fancyhead{}
+\fancyhead[RO,LE]{}
+\fancyfoot{}
+\fancyfoot[LE,RO]{\thepage}
+\fancyfoot[LO,CE]{}
+\fancyfoot[CO,RE]{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\newcommand{\udc}{}
+\newcommand{\theudc}{}
+\renewcommand{\udc}[1]{%
+\renewcommand{\theudc}{{\noindent\small \CYRU\CYRD\CYRK~#1}}}
+
+\newcommand{\thetitle}{}
+\newcommand{\TitleInTitlePage}{}
+\newcommand{\TitleInTableOfContenst}{}
+\renewcommand{\title}[1]{%
+\renewcommand{\thetitle}{#1}%
+%\renewcommand{\TitleInTitlePage}{{\small\bf\MakeTextUppercase{#1}}} 
+% this does not work with an utfx inputenc codepage for cyrillic letters
+\renewcommand{\TitleInTitlePage}{{\large\sc{#1}}}%
+\renewcommand{\TitleInTableOfContenst}{\noindent {#1}}}
+
+\newcommand{\theauthor}{}
+\newcommand{\AutorInTitlePage}{}
+\newcommand{\AuthorInTableOfContenst}{}
+\renewcommand{\author}[2]{%
+\renewcommand{\theauthor}{{\footnotesize\sl #1}}%
+\renewcommand{\AutorInTitlePage}{{\noindent{\emph{#1}}}}%
+\renewcommand{\AuthorInTableOfContenst}{#2}}
+
+\newcommand{\ac}[2]{\addcontentsline{toc}{chapter}{{\it #1} #2}}
+
+\newcounter{figure} % is it a ncc class trouble?
+\newcounter{table}  % is it a ncc class trouble?
+\newcounter{thm}
+\newcounter{rem}
+\newcounter{exa}
+\newcounter{lem}
+\newcounter{def}
+
+\newcommand{\clean}{
+\setcounter{section}{0}
+\setcounter{thm}{0}
+\setcounter{rem}{0}
+\setcounter{exa}{0}
+\setcounter{lem}{0}
+\setcounter{def}{0}
+\setcounter{equation}{0}
+\setcounter{figure}{0}
+\setcounter{table}{0}
+\setcounter{footnote}{0}
+}
+
+\providecommand\phantomsection{} 
+
+\renewcommand{\maketitle}{%
+\vspace{1cm plus 1ex minus .2ex}
+\phantomsection
+\ac{\AuthorInTableOfContenst~\nobreak}{\TitleInTableOfContenst} 
+\clean
+\theudc
+\begin{center}
+\AutorInTitlePage 
+\vskip1mm 
+\TitleInTitlePage
+\end{center} 
+\normalsize 
+\normalfont
+\vskip1mm}
+
+\newcommand{\email}[1]{\href{mailto:#1}{\texttt{\nolinkurl{#1}}}}
+
+\DeclareSection*{1}{section}{}{0.5ex plus 1ex minus .2ex}{0.3ex plus.2ex}{\normalsize\bff}
+\DeclareSection{-1}{figure}{\rm}{2.5ex}{0pt}{\small}
+\DeclareSection{-2}{table}{\small\sc}{0pt}{0.5ex}{\small}
+\renewcommand{\thempfootnote}{\it\alph{mpfootnote}} % 
+% a \ralph command is default in the russian definition for \thempfootnote command, 
+% so we have a trouble with this in the mathematical mode
+\renewcommand{\theequation}{\arabic{equation}}
+\renewcommand{\thesection}{\arabic{section}}
+\renewcommand{\thefigure}{\rm \arabic{figure}}
+\DeclareTOCEntry{0}{}{}{9.9}{}
+\setcounter{tocdepth}{0}
+\SectionTagSuffix{.~}
+\sectionstyle{center}
+\captiontagstyle[table]{right}
+\captionstyle{centerlast}
+
+\newcommand{\Proof}{\vskip1mm\textit{\CYRD\cyro\cyrk\cyra\cyrz\cyra\cyrt\cyre\cyrl\cyrsftsn\cyrs\cyrt\cyrv\cyro\/~}}
+\renewenvironment{proof}[1][s]
+{\vskip1mm \ifthenelse{\equal{#1}{s}}{{\it \CYRD\cyro\cyrk\cyra\cyrz\cyra\cyrt\cyre\cyrl\cyrsftsn\cyrs\cyrt\cyrv\cyro\/}.~}{{#1. }}}{\hfill$\scriptstyle\square$
+\vskip1mm}
+
+\newenvironment{newthm}[2][s]
+{\vskip1mm \ifthenelse{\equal{#1}{s}}{{\small \sc #2.}}{{\small \sc #2 #1.}}}{\vskip1mm}
+
+\renewenvironment{theorem}[1][s]
+{\vskip1mm\ifthenelse{\equal{#1}{s}}{\refstepcounter{thm}{\small\sc\CYRT\cyre\cyro\cyrr\cyre\cyrm\cyra~\thethm.~}\it}
+{{\small\sc\CYRT\cyre\cyro\cyrr\cyre\cyrm\cyra~#1.}\it}}{\vskip1mm}
+\newenvironment{theorem*}
+{\vskip1mm{\small\sc\CYRT\cyre\cyro\cyrr\cyre\cyrm\cyra.}\it}{\vskip1mm}
+
+\renewenvironment{remark}[1][s]
+{\vskip1mm \ifthenelse{\equal{#1}{s}}{\refstepcounter{rem}{\small\sc\CYRZ\cyra\cyrm\cyre\cyrch\cyra\cyrn\cyri\cyre~\therem.~}}
+{{\small\sc\CYRZ\cyra\cyrm\cyre\cyrch\cyra\cyrn\cyri\cyre~#1.~}}}{\vskip1mm}
+\newenvironment{remark*}
+{\vskip1mm{\small\sc\CYRZ\cyra\cyrm\cyre\cyrch\cyra\cyrn\cyri\cyre.~}}{\vskip1mm}
+
+\renewenvironment{example}[1][s]
+{\vskip1mm \ifthenelse{\equal{#1}{s}}{\refstepcounter{exa}{\small\sc\CYRP\cyrr\cyri\cyrm\cyre\cyrr~\theexa.}}
+{{\small\sc\CYRP\cyrr\cyri\cyrm\cyre\cyrr~#1.}}}{\vskip1mm}
+\newenvironment{example*}
+{\vskip1mm{\small\sc\CYRP\cyrr\cyri\cyrm\cyre\cyrr.}}
+{\vskip1mm}
+
+\renewenvironment{lemma}[1][s]
+{\vskip1mm \ifthenelse{\equal{#1}{s}}{\refstepcounter{lem}{\small\sc \CYRL\cyre\cyrm\cyrm\cyra~\thelem.~}}
+{{\small\sc \CYRL\cyre\cyrm\cyrm\cyra~#1.}}}{\vskip1mm}
+\newenvironment{lemma*}
+{\vskip1mm {\small\sc \CYRL\cyre\cyrm\cyrm\cyra.}}{\vskip1mm}
+
+\renewenvironment{definition}[1][s]
+{\vskip1mm \ifthenelse{\equal{#1}{s}}{\refstepcounter{def}{\small\sc\CYRO\cyrp\cyrr\cyre\cyrd\cyre\cyrl\cyre\cyrn\cyri\cyre~\thedef.~}}
+{{\small\sc\CYRO\cyrp\cyrr\cyre\cyrd\cyre\cyrl\cyre\cyrn\cyri\cyre~#1.}}}{\vskip1mm}
+\newenvironment{definition*}
+{\vskip1mm{\small\sc\CYRO\cyrp\cyrr\cyre\cyrd\cyre\cyrl\cyre\cyrn\cyri\cyre.~}}{\vskip1mm}
