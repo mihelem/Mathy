@@ -110,22 +110,26 @@ error_v(::Type{T}) where {T<:Integer} = typemax(T)
 is_error_v(value::T) where {T} = value == error_v(T)
 is_error_v(value::T) where {T<:AbstractFloat} = isnan(value)
 
-function run_bench(::Type{V}, m, n, singular, active;
-    max_iter=4000,
-    decay=2.0,
-    max_hiter=40,
-    restart=true) where {V}
+function run_bench(
+    ::Type{V},
+    ::Type{SG},
+    problem::QMCFBProblem,
+    singular, active,
+    sg_args::Tuple=(),
+    sg_kwargs::NamedTuple=(α=1.0, β=0.99),
+    sg_update=sg->sg.α/=2.0;
+    max_iter::Int64=4000,
+    max_hiter::Int64=40,
+    restart::Bool=true,
+    todos::Set=Set{String}(["dual", "min_grad", "mg_EK", "mg_SPEK", "mg_SPEKn",
+        "Ipopt", "Ipopt_EK", "Ipopt_SPEK", "Ipopt_SPEKn"])) where {V, SG<:SubgradientMethod}
 
-    if typeof(singular) <: AbstractFloat
-        singular = min(ceil(eltype(m), n*singular), n)
-    end
-    if typeof(active) <: AbstractFloat
-        active = min(ceil(eltype(m), n*active), n)
-    end
+    m, n = size(problem.E)
     result = BenchResult{V}(m, n, singular, active)
 
     μ₀ = rand(m)
-    subgradient = Subgradient.NesterovMomentum(α=1.0, β=0.99);
+    subgradient = SG(sg_args...; sg_kwargs...)
+
     algorithm = QMCFBPAlgorithmD1SG(;
         localization=subgradient,
         verbosity=1,
@@ -134,22 +138,20 @@ function run_bench(::Type{V}, m, n, singular, active;
         ε=1e-6,
         ϵ=1e-12);
     test = get_test(algorithm;
-        m=m,
-        n=n,
-        singular=singular,
-        active=active,
-        type=V);
-    problem = test.problem;
-    @unpack Q, q, l, u, E, b = problem;
-    Q╲ = view(Q, [CartesianIndex(i, i) for i in 1:size(Q, 1)]);
+        problem=problem,
+        type=V)
+
+    problem = test.problem
+    @unpack Q, q, l, u, E, b = problem
+    Q╲ = view(Q, [CartesianIndex(i, i) for i in 1:size(Q, 1)])
 
     function runtest()
         for i in 1:max_hiter
             print("$i ")
-            run!(test);
-            set!(algorithm, test.result);  # set initial status of algorithm
-            algorithm.stopped = !restart;     # not stopped implies re-init subgradient method
-            subgradient.α /= decay
+            run!(test)
+            set!(algorithm, test.result)      # set initial status of algorithm
+            algorithm.stopped = !restart      # not stopped implies re-init subgradient method
+            sg_update(subgradient)
         end
         println()
     end
@@ -175,36 +177,64 @@ function run_bench(::Type{V}, m, n, singular, active;
 
     # benchmark min-norm ϵ-subgradient
     println("min_grad")
-    bm = @benchmark ($(cache)["x"] = Optimization.MinCostFlow.primal_from_dual($(problem), $(μ);
-        ϵ=1e-4, ε=1e-10, max_iter=2000)) evals=1 samples=1
-    result.time_min_grad = minimum(bm).time
-    result.f_min_grad = get_f(cache["x"])
-    result.df_min_grad = get_df(cache["x"])
-    result.x_min_grad = norm(cache["x"])
-    let Exb = E*cache["x"]-b
-        result.unf_min_grad = norm(Exb)
-        result.unf_min_grad_1 = norm(Exb, 1)
+    try
+        if !("min_grad" in todos)
+            error("SKIP")
+        end
+        bm = @benchmark ($(cache)["x"] = Optimization.MinCostFlow.primal_from_dual($(problem), $(μ);
+            ϵ=1e-4, ε=1e-10, max_iter=2000)) evals=1 samples=1
+        result.time_min_grad = minimum(bm).time
+        result.f_min_grad = get_f(cache["x"])
+        result.df_min_grad = get_df(cache["x"])
+        result.x_min_grad = norm(cache["x"])
+        let Exb = E*cache["x"]-b
+            result.unf_min_grad = norm(Exb)
+            result.unf_min_grad_1 = norm(Exb, 1)
+        end
+    catch err
+        println("min grad : ($m, $n, $singular, $active) : $err")
+        result.time_min_grad = error_v(V)
+        result.f_min_grad = error_v(V)
+        result.df_min_grad = error_v(V)
+        result.x_min_grad = error_v(V)
+        result.unf_min_grad = error_v(V)
+        result.unf_min_grad_1 = error_v(V)
     end
-
     # benchmark EKHeuristic (after min-norm ϵ-subgradient)
     println("mg_EK")
-    bm = @benchmark (
-        $(cache)["mg_EK"] =
-            Optimization.MinCostFlow.EKHeuristic($(problem), $(cache)["x"]; ϵ=1e-16) |>
-            heu -> (init!(heu); run!(heu))) evals=1 samples=1
-    cache["x_mg_EK"], cache["Δ_mg_EK"] = cache["mg_EK"]
-    result.time_mg_EK = minimum(bm).time
-    result.f_mg_EK = get_f(cache["x_mg_EK"])
-    result.df_mg_EK = get_df(cache["x_mg_EK"])
-    result.x_mg_EK = norm(cache["x_mg_EK"])
-    let Exb = E*cache["x_mg_EK"]-b
-        result.unf_mg_EK = norm(Exb)
-        result.unf_mg_EK_1 = norm(Exb, 1)
+    try
+        if !("mg_EK" in todos)
+            error("SKIP")
+        end
+        bm = @benchmark (
+            $(cache)["mg_EK"] =
+                Optimization.MinCostFlow.EKHeuristic($(problem), $(cache)["x"]; ϵ=1e-16) |>
+                heu -> (init!(heu); run!(heu))) evals=1 samples=1
+        cache["x_mg_EK"], cache["Δ_mg_EK"] = cache["mg_EK"]
+        result.time_mg_EK = minimum(bm).time
+        result.f_mg_EK = get_f(cache["x_mg_EK"])
+        result.df_mg_EK = get_df(cache["x_mg_EK"])
+        result.x_mg_EK = norm(cache["x_mg_EK"])
+        let Exb = E*cache["x_mg_EK"]-b
+            result.unf_mg_EK = norm(Exb)
+            result.unf_mg_EK_1 = norm(Exb, 1)
+        end
+    catch err
+        println("mg EK : ($m, $n, $singular, $active) : $err")
+        result.time_mg_EK = error_v(V)
+        result.f_mg_EK = error_v(V)
+        result.df_mg_EK = error_v(V)
+        result.x_mg_EK = error_v(V)
+        result.unf_mg_EK = error_v(V)
+        result.unf_mg_EK_1 = error_v(V)
     end
 
     # benchmark strict SPEKHeuristic (after min-norm ϵ-subgradient)
     println("mg_SPEK")
     try
+        if !("mg_SPEK" in todos)
+            error("SKIP")
+        end
         bm = @benchmark (
             $(cache)["mg_SPEK"] =
                 Optimization.MinCostFlow.SPEKHeuristic($(problem), $(Q)*$(cache)["x"]+$(q), $(cache)["x"]; ϵ=1e-14, ϵₚ=1e-10) |>
@@ -219,7 +249,7 @@ function run_bench(::Type{V}, m, n, singular, active;
             result.unf_mg_SPEK_1 = norm(Exb, 1)
         end
     catch err
-        println("SPEK : ($m, $n, $singular, $active) : $err")
+        println("mg SPEK : ($m, $n, $singular, $active) : $err")
         result.time_mg_SPEK = error_v(V)
         result.f_mg_SPEK = error_v(V)
         result.df_mg_SPEK = error_v(V)
@@ -231,6 +261,9 @@ function run_bench(::Type{V}, m, n, singular, active;
     # benchmark SPEKHeuristic (after min-norm ϵ-subgradient)
     println("mg_SPEKn")
     try
+        if !("mg_SPEKn" in todos)
+            error("SKIP")
+        end
         bm = @benchmark (
             $(cache)["mg_SPEKn"] =
                 Optimization.MinCostFlow.SPEKHeuristic($(problem), $(Q)*$(cache)["x"]+$(q), $(cache)["x"]; ϵ=1e-14, ϵₚ=1e-10, strict=false) |>
@@ -245,7 +278,7 @@ function run_bench(::Type{V}, m, n, singular, active;
             result.unf_mg_SPEKn_1 = norm(Exb, 1)
         end
     catch err
-        println("SPEKn : ($m, $n, $singular, $active) : $err")
+        println("mg SPEKn : ($m, $n, $singular, $active) : $err")
         result.time_mg_SPEKn = error_v(V)
         result.f_mg_SPEKn = error_v(V)
         result.df_mg_SPEKn = error_v(V)
@@ -256,39 +289,67 @@ function run_bench(::Type{V}, m, n, singular, active;
 
     # benchmark Ipopt
     println("Ipopt")
-    bm = @benchmark ($(cache)["x_Ipopt"] =
-        get_solution_quadratic_box_constrained($(problem), zeros(Float64, $(n)))) evals=1 samples=1
-    cache["x_Ipopt"] = max.(min.(cache["x_Ipopt"], u), l)
-    result.time_Ipopt = minimum(bm).time
-    result.f_Ipopt = get_f(cache["x_Ipopt"])
-    result.df_Ipopt = get_df(cache["x_Ipopt"])
-    result.x_Ipopt = norm(cache["x_Ipopt"])
-    let Exb = E*cache["x_Ipopt"]-b
-        result.unf_Ipopt = norm(Exb)
-        result.unf_Ipopt_1 = norm(Exb, 1)
+    try
+        if !("Ipopt" in todos)
+            error("SKIP")
+        end
+        bm = @benchmark ($(cache)["x_Ipopt"] =
+            get_solution_quadratic_box_constrained($(problem), zeros(Float64, $(n)))) evals=1 samples=1
+        cache["x_Ipopt"] = max.(min.(cache["x_Ipopt"], u), l)
+        result.time_Ipopt = minimum(bm).time
+        result.f_Ipopt = get_f(cache["x_Ipopt"])
+        result.df_Ipopt = get_df(cache["x_Ipopt"])
+        result.x_Ipopt = norm(cache["x_Ipopt"])
+        let Exb = E*cache["x_Ipopt"]-b
+            result.unf_Ipopt = norm(Exb)
+            result.unf_Ipopt_1 = norm(Exb, 1)
+        end
+    catch err
+        println("Ipopt : ($m, $n, $singular, $active) : $err")
+        result.time_Ipopt = error_v(V)
+        result.f_Ipopt = error_v(V)
+        result.df_Ipopt = error_v(V)
+        result.x_Ipopt = error_v(V)
+        result.unf_Ipopt = error_v(V)
+        result.unf_Ipopt_1 = error_v(V)
     end
 
 
     # benchmark EKHeuristic (after Ipopt)
     println("Ipopt_EK")
-    bm = @benchmark (
-        $(cache)["Ipopt_EK"] =
-            Optimization.MinCostFlow.EKHeuristic($(problem), $(cache)["x_Ipopt"]; ϵ=1e-16) |>
-            heu -> (init!(heu); run!(heu))) evals=1 samples=1
-    cache["x_Ipopt_EK"], cache["Δ_Ipopt_EK"] = cache["Ipopt_EK"]
-    result.time_Ipopt_EK = minimum(bm).time
-    result.f_Ipopt_EK = get_f(cache["x_Ipopt_EK"])
-    result.df_Ipopt_EK = get_df(cache["x_Ipopt_EK"])
-    result.x_Ipopt_EK = norm(cache["x_Ipopt_EK"])
-    let Exb = cache["Δ_Ipopt_EK"]
-        result.unf_Ipopt_EK = norm(Exb)
-        result.unf_Ipopt_EK_1 = norm(Exb, 1)
+    try
+        if !("Ipopt_EK" in todos)
+            error("SKIP")
+        end
+        bm = @benchmark (
+            $(cache)["Ipopt_EK"] =
+                Optimization.MinCostFlow.EKHeuristic($(problem), $(cache)["x_Ipopt"]; ϵ=1e-16) |>
+                heu -> (init!(heu); run!(heu))) evals=1 samples=1
+        cache["x_Ipopt_EK"], cache["Δ_Ipopt_EK"] = cache["Ipopt_EK"]
+        result.time_Ipopt_EK = minimum(bm).time
+        result.f_Ipopt_EK = get_f(cache["x_Ipopt_EK"])
+        result.df_Ipopt_EK = get_df(cache["x_Ipopt_EK"])
+        result.x_Ipopt_EK = norm(cache["x_Ipopt_EK"])
+        let Exb = cache["Δ_Ipopt_EK"]
+            result.unf_Ipopt_EK = norm(Exb)
+            result.unf_Ipopt_EK_1 = norm(Exb, 1)
+        end
+    catch err
+        println("Ipopt EK : ($m, $n, $singular, $active) : $err")
+        result.time_Ipopt_EK = error_v(V)
+        result.f_Ipopt_EK = error_v(V)
+        result.df_Ipopt_EK = error_v(V)
+        result.x_Ipopt_EK = error_v(V)
+        result.unf_Ipopt_EK = error_v(V)
+        result.unf_Ipopt_EK_1 = error_v(V)
     end
 
     # benchmark strict SPEKHeuristic (after Ipopt)
     println("Ipopt_SPEK")
     try
-        error("Ipopt_SPEK : SKIP")
+        if !("Ipopt_SPEK" in todos)
+            error("SKIP")
+        end
         bm = @benchmark (
             $(cache)["Ipopt_SPEK"] =
                 Optimization.MinCostFlow.SPEKHeuristic($(problem), $(Q)*$(cache)["x_Ipopt"]+$(q), $(cache)["x_Ipopt"]; ϵ=1e-14, ϵₚ=1e-10) |>
@@ -315,7 +376,9 @@ function run_bench(::Type{V}, m, n, singular, active;
     # benchmark SPEKHeuristic (after min-norm ϵ-subgradient)
     println("Ipopt_SPEKn")
     try
-        error("Ipopt_SPEKn : SKIP")
+        if !("Ipopt_SPEKn" in todos)
+            error("SKIP")
+        end
         bm = @benchmark (
             $(cache)["Ipopt_SPEKn"] =
                 Optimization.MinCostFlow.SPEKHeuristic($(problem), $(Q)*$(cache)["x_Ipopt"]+$(q), $(cache)["x_Ipopt"]; ϵ=1e-14, ϵₚ=1e-10, strict=false) |>
@@ -341,14 +404,39 @@ function run_bench(::Type{V}, m, n, singular, active;
 
     result
 end
+function run_bench(::Type{V}, ::Type{SG}, m::Int64, n::Int64, singular::Int64, active::Int64,
+    args...; kwargs...) where {V, SG<:SubgradientMethod}
 
-function run_bench(::Type{V}, io::IO, args...; kwargs...) where {V}
-    result = run_bench(V, args...; kwargs...)
+    if typeof(singular) <: AbstractFloat
+        singular = min(ceil(eltype(m), n*singular), n)
+    end
+    if typeof(active) <: AbstractFloat
+        active = min(ceil(eltype(m), n*active), n)
+    end
+
+    problem = generate_quadratic_min_cost_flow_boxed_problem(
+        V, m, n; singular=singular, active=active)
+
+    run_bench(V, problem, singular, active, SG, args...; kwargs...)
+end
+function run_bench(io::IO, ::Type{V}, ::Type{SG}, args...; kwargs...) where {V, SG<:SubgradientMethod}
+    result = run_bench(V, SG, args...; kwargs...)
     println(io, result)
     flush(io)
+
+    result
 end
 
-function random_benches(::Type{V}, filename::String, times, nodes::AbstractArray) where {V}
+function random_benches(::Type{V}, filename::String, times, nodes::AbstractArray,
+    ::Type{SG}=Subgradient.NesterovMomentum,
+    sg_args::Tuple=(),
+    sg_kwargs::NamedTuple=(α=1.0, β=0.99),
+    sg_update=sg->sg.α/=2.0;
+    max_iter=4000,
+    max_hiter=40,
+    restart=true,
+    todos=Set(["dual", "min_grad", "mg_EK", "mg_SPEK", "mg_SPEKn"])) where {V, SG<:SubgradientMethod}
+
     open(filename, "a") do io
         legenda(io, BenchResult{V})
         for i in 1:times
@@ -356,7 +444,14 @@ function random_benches(::Type{V}, filename::String, times, nodes::AbstractArray
             n = rand(m:m*(m-1)÷2)
             singular = rand()
             active = rand()
-            run_bench(V, io, m, n, singular, active)
+            run_bench(io, V, SG, m, n, singular, active,
+                sg_args,
+                sg_kwargs,
+                sg_update;
+                max_iter=max_iter,
+                max_hiter=max_hiter,
+                restart=restart,
+                todos=todos)
         end
     end
 end

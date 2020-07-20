@@ -49,7 +49,7 @@ function step!(M::WithStopCriterion{<:SubgradientMethod}, f, ∂f, x)
     return (x, α, d)
 end
 
-struct FixedStepSize <: SubgradientMethod
+mutable struct FixedStepSize <: SubgradientMethod
     α
 
     params
@@ -178,7 +178,7 @@ mutable struct TargetLevelPolyakStepSize <: SubgradientMethod
     β   # step factor
     δ   # target threshold
     ρ   # decay of δ
-    R   # 
+    R   #
     f_opt
     f_target
     get_f_target
