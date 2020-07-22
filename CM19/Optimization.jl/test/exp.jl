@@ -3,10 +3,10 @@ include("benchmark.jl")
 m, n, singular, active = 100, 400, 130, 90
 problem = generate_quadratic_min_cost_flow_boxed_problem(Float64, m, n; singular=singular, active=active)
 
-results = Dict()
+raw_results = Dict{DataType, Tuple}()
 
 open("exp.csv", "a") do io
-    results["nm"] =
+    raw_results[Subgradient.NesterovMomentum] =
         run_bench(
             io,
             Float64,
@@ -14,8 +14,8 @@ open("exp.csv", "a") do io
             problem,
             singular,
             active;
-            todos=Set{String}(["dual", "min_grad", "mg_EK", "mg_SPEK", "mg_SPEKn"]))
-    results["fss"] =
+            todos=Set{String}(["dual", "min_grad", "EK", "mg_EK", "SPEK", "mg_SPEK", "SPEKn", "mg_SPEKn"]))
+    raw_results[Subgradient.FixedStepSize] =
         run_bench(
             io,
             Float64,
@@ -26,15 +26,34 @@ open("exp.csv", "a") do io
             Tuple(1.0),
             NamedTuple();
             max_iter=8000,
-            todos=Set{String}(["dual", "min_grad", "mg_EK", "mg_SPEK", "mg_SPEKn"]))
+            todos=Set{String}(["dual", "min_grad", "EK", "mg_EK", "SPEK", "mg_SPEK", "SPEKn", "mg_SPEKn"]))
 end
 
-ϵᵣ = r -> (r.f_mg_SPEKn - r.f_dual) / abs(r.f_mg_SPEKn)
-ϵᵣ(results["nm"])
-ϵᵣ(results["fss"])
+# possible heuristics:
+# min_grad, EK, mg_EK, SPEK, mg_SPEK, SPEKn, mgSPEKn
+heus = ["min_grad", "EK", "mg_EK", "SPEK", "mg_SPEK", "SPEKn", "mg_SPEKn"]
+mutable struct Result
+    ϵᵣ
+    Δϵᵣ
+end
+function ϵs(problem::QMCFBProblem, result::BenchResult, heuristic::String)
+    m, n = size(problem.E)
 
-# distanza da feasible: n |Δb|₁
-# errore su f:   |Qx+q|*^
-ϵᵤ = r -> n*r.unf_mg_SPEKn_1*r.df_mg_SPEKn/abs(r.f_mg_SPEKn)
-ϵᵤ(results["nm"])
-ϵᵤ(results["fss"])
+    f_dual = result.f_dual
+    f_heu = getfield(result, Symbol("f_"*heuristic))
+    unf_heu_1 = getfield(result, Symbol("unf_"*heuristic*"_1"))
+    df_heu =  getfield(result, Symbol("df_"*heuristic))
+
+    Result(
+        (f_heu-f_dual) / abs(f_heu),            # ϵᵣₑₗ
+        n * unf_heu_1 * df_heu / abs(f_heu)     # Δϵᵣₑₗ
+    )
+end
+
+results = Dict{DataType, Dict{String, Result}}()
+for (key, val) in raw_results
+    results[key] = Dict{String, Result}()
+    for heu in heus
+        results[key][heu] = ϵs(problem, val[1], heu)
+    end
+end
