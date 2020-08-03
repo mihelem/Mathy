@@ -136,6 +136,7 @@ function run_bench(
     sg_args::Tuple=(),
     sg_kwargs::NamedTuple=(α=1.0, β=0.99),
     sg_update=sg->sg.α/=2.0;
+    μ₀=nothing,
     max_iter::Int64=4000,
     max_hiter::Int64=40,
     restart::Bool=true,
@@ -145,7 +146,7 @@ function run_bench(
     m, n = size(problem.E)
     result = BenchResult{V}(m, n, singular, active)
 
-    μ₀ = rand(m)
+    μ₀ = μ₀ === nothing ? rand(m) : μ₀
     subgradient = SG(sg_args...; sg_kwargs...)
 
     algorithm = QMCFBPAlgorithmD1SG(;
