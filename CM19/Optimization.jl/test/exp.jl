@@ -44,8 +44,8 @@ all_raw_results = Dict{DataType, Tuple}[]
 
 μ₀ = rand(100)
 function doit(max_iter, all::Bool; rnm=true, rsg=true)
-    open("heus_res.csv", "a") do iore
-        open("heus.csv", "a") do io
+    open("test00_res.csv", "a") do iore
+        open("test00.csv", "a") do io
             for m in ms
                 for dn in ns
                     n = convert(Int64, m*(1 + floor(dn/2 * (m-3))))
@@ -172,8 +172,7 @@ for t in ts
         res = getfield(
                 all_raw_results[end][Optimization.Subgradient.NesterovMomentum][1],
                 Symbol("f_"*heu))
-        push!(Ls[heu],
-            )
+        push!(Ls[heu], res)
     end
     #push!(Ls_SNM, all_raw_results[end][Optimization.Subgradient.NesterovMomentum][1].f_dual)
     #push!(Ls_SGR, all_raw_results[end][Optimization.Subgradient.FixedStepSize][1].f_dual)
@@ -181,7 +180,38 @@ for t in ts
     #    all_raw_results[end][Optimization.Subgradient.FixedStepSize][end]
     #plot!(p, is/t, (L .- Ls) ./ abs(L), yaxis=:log2, color=:black)
 end
+Ls
+ts
 
+j=0
+good = .~(isnan.(Ls["SPEK"]) .| isnan.(Ls["mg_SPEK"]))
+plot!(p,
+        ts[good],
+        -(L .- Ls["mg_SPEK"][good]) ./ abs(L),
+        title=L"Projections~on~S_{(P)}",
+        fillcolor = :lightgray,
+        color=:black,
+        yaxis=:log2,
+        xaxis=:log2,
+        label="mg_SPEK",
+        xlabel="iterations per stage",
+        linestyle=:dashdot,
+        ylabel=L"\epsilon_{rel}",
+        legend=true)
+plot!(p,
+        ts[good],
+        -(L .- Ls["mg_SPEKn"][good]) ./ abs(L),
+        title="SPEKn vs mg_SPEKn",
+        fillcolor = :lightgray,
+        linestyle=:dash,
+        color=:black,
+        yaxis=:log2,
+        xaxis=:log2,
+        label="mg_SPEKn",
+        xlabel="iterations per stage",
+        ylabel=L"\epsilon_{rel}",
+        legend=true)
+savefig("projections.png")
 
 j=27
 p = plot(

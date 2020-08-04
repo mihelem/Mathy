@@ -1,13 +1,15 @@
+# Generate instances with PARGEN+NETGEN+QFCGEN
+
 # generate the parameter files
-k = 1
 function doit(k)
     for n in 1000
         for ρ in 1:3
-            for cf in ['a', 'b']
-                for cq in ['a', 'b']
-                    for scale in ["ns"]
-                        run(`./Optimization.jl/test/gen/pargen $n $ρ $k $cf $cq $scale`)
-                        k += 1
+            for k in 1:5
+                for cf in ['a', 'b']
+                    for cq in ['a', 'b']
+                        for scale in ["ns"]
+                            run(`./Optimization.jl/test/gen/pargen $n $ρ $k $cf $cq $scale`)
+                        end
                     end
                 end
             end
@@ -37,11 +39,5 @@ for filename in readdir(path)
         continue
     end
     qfc_file = filename[1:end-3]*"qfc"
-    write(
-        path*qfc_file,
-        read(
-            pipeline(
-                path*filename,
-                `./Optimization.jl/test/gen/qfcgen`),
-            String))
+    run(`./Optimization.jl/test/gen/qfcgen $path$filename`)
 end
