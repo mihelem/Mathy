@@ -1,7 +1,7 @@
 # Benchmark Subgradient
 # nodes arcs singular active
-# L_lb L_min_grad L_EK L_SPEK L_SPEKn L_Ipopt L_Ipopt_EK L_Ipopt_SPEK L_Ipopt_SPEKn
-# time_dual time_min_grad time_EK time_SPEK time_SPEKn time_Ipopt time_Ipopt_EK time_Ipopt_SPEK time_Ipopt_SPEKn
+# L_lb L_min_grad L_EK L_SPEK L_SPEKn L_JuMP L_JuMP_EK L_JuMP_SPEK L_JuMP_SPEKn
+# time_dual time_min_grad time_EK time_SPEK time_SPEKn time_JuMP time_JuMP_EK time_JuMP_SPEK time_JuMP_SPEKn
 # (time is in nanoseconds)
 using Optimization, LinearAlgebra, Parameters, BenchmarkTools, Profile
 include("../test/nljumpy.jl")
@@ -20,10 +20,10 @@ mutable struct BenchResult{V}
     x_SPEK::V
     x_mg_SPEKn::V
     x_SPEKn::V
-    x_Ipopt::V
-    x_Ipopt_EK::V
-    x_Ipopt_SPEK::V
-    x_Ipopt_SPEKn::V
+    x_JuMP::V
+    x_JuMP_EK::V
+    x_JuMP_SPEK::V
+    x_JuMP_SPEKn::V
 
     f_dual::V
     f_min_grad::V
@@ -33,10 +33,10 @@ mutable struct BenchResult{V}
     f_SPEK::V
     f_mg_SPEKn::V
     f_SPEKn::V
-    f_Ipopt::V
-    f_Ipopt_EK::V
-    f_Ipopt_SPEK::V
-    f_Ipopt_SPEKn::V
+    f_JuMP::V
+    f_JuMP_EK::V
+    f_JuMP_SPEK::V
+    f_JuMP_SPEKn::V
 
     df_dual::V
     df_min_grad::V
@@ -46,10 +46,10 @@ mutable struct BenchResult{V}
     df_SPEK::V
     df_mg_SPEKn::V
     df_SPEKn::V
-    df_Ipopt::V
-    df_Ipopt_EK::V
-    df_Ipopt_SPEK::V
-    df_Ipopt_SPEKn::V
+    df_JuMP::V
+    df_JuMP_EK::V
+    df_JuMP_SPEK::V
+    df_JuMP_SPEKn::V
 
     time_dual::Float64
     time_min_grad::Float64
@@ -59,10 +59,10 @@ mutable struct BenchResult{V}
     time_SPEK::Float64
     time_mg_SPEKn::Float64
     time_SPEKn::Float64
-    time_Ipopt::Float64
-    time_Ipopt_EK::Float64
-    time_Ipopt_SPEK::Float64
-    time_Ipopt_SPEKn::Float64
+    time_JuMP::Float64
+    time_JuMP_EK::Float64
+    time_JuMP_SPEK::Float64
+    time_JuMP_SPEKn::Float64
 
     unf_dual::V
     unf_min_grad::V
@@ -72,10 +72,10 @@ mutable struct BenchResult{V}
     unf_SPEK::V
     unf_mg_SPEKn::V
     unf_SPEKn::V
-    unf_Ipopt::V
-    unf_Ipopt_EK::V
-    unf_Ipopt_SPEK::V
-    unf_Ipopt_SPEKn::V
+    unf_JuMP::V
+    unf_JuMP_EK::V
+    unf_JuMP_SPEK::V
+    unf_JuMP_SPEKn::V
 
     unf_dual_1::V
     unf_min_grad_1::V
@@ -85,10 +85,10 @@ mutable struct BenchResult{V}
     unf_SPEK_1::V
     unf_mg_SPEKn_1::V
     unf_SPEKn_1::V
-    unf_Ipopt_1::V
-    unf_Ipopt_EK_1::V
-    unf_Ipopt_SPEK_1::V
-    unf_Ipopt_SPEKn_1::V
+    unf_JuMP_1::V
+    unf_JuMP_EK_1::V
+    unf_JuMP_SPEK_1::V
+    unf_JuMP_SPEKn_1::V
 
     BenchResult{V}() where {V} = new{V}()
     BenchResult{V}(nodes, arcs, singular, active) where {V} = new{V}(nodes, arcs, singular, active)
@@ -141,7 +141,7 @@ function run_bench(
     max_hiter::Int64=40,
     restart::Bool=true,
     todos::Set=Set{String}(["dual", "min_grad", "mg_EK", "mg_SPEK", "mg_SPEKn",
-        "Ipopt", "Ipopt_EK", "Ipopt_SPEK", "Ipopt_SPEKn", "time", "plot"])) where {V, SG<:SubgradientMethod}
+        "JuMP", "JuMP_EK", "JuMP_SPEK", "JuMP_SPEKn", "time", "plot"])) where {V, SG<:SubgradientMethod}
 
     m, n = size(problem.E)
     result = BenchResult{V}(m, n, singular, active)
@@ -456,146 +456,146 @@ function run_bench(
         result.unf_SPEKn_1 = error_v(V)
     end
 
-    # benchmark Ipopt
-    println("Ipopt")
+    # benchmark JuMP
+    println("JuMP")
     try
-        if !("Ipopt" in todos)
+        if !("JuMP" in todos)
             error("SKIP")
         end
         if "time" in todos
-            bm = @benchmark ($(cache)["x_Ipopt"] =
+            bm = @benchmark ($(cache)["x_JuMP"] =
                 get_solution_quadratic_box_constrained($(problem), zeros(Float64, $(n)))) evals=1 samples=1 seconds=1e-9
-            result.time_Ipopt = minimum(bm).time
+            result.time_JuMP = minimum(bm).time
         else
-            cache["x_Ipopt"] =
+            cache["x_JuMP"] =
                 get_solution_quadratic_box_constrained(problem, zeros(Float64, n))
-            result.time_Ipopt = error_v(Float64)
+            result.time_JuMP = error_v(Float64)
         end
-        cache["x_Ipopt"] = max.(min.(cache["x_Ipopt"], u), l)
-        result.f_Ipopt = get_f(cache["x_Ipopt"])
-        result.df_Ipopt = get_df(cache["x_Ipopt"])
-        result.x_Ipopt = norm(cache["x_Ipopt"])
-        let Exb = E*cache["x_Ipopt"]-b
-            result.unf_Ipopt = norm(Exb)
-            result.unf_Ipopt_1 = norm(Exb, 1)
+        cache["x_JuMP"] = max.(min.(cache["x_JuMP"], u), l)
+        result.f_JuMP = get_f(cache["x_JuMP"])
+        result.df_JuMP = get_df(cache["x_JuMP"])
+        result.x_JuMP = norm(cache["x_JuMP"])
+        let Exb = E*cache["x_JuMP"]-b
+            result.unf_JuMP = norm(Exb)
+            result.unf_JuMP_1 = norm(Exb, 1)
         end
     catch err
-        println("Ipopt : ($m, $n, $singular, $active) : $err")
-        result.time_Ipopt = error_v(V)
-        result.f_Ipopt = error_v(V)
-        result.df_Ipopt = error_v(V)
-        result.x_Ipopt = error_v(V)
-        result.unf_Ipopt = error_v(V)
-        result.unf_Ipopt_1 = error_v(V)
+        println("JuMP : ($m, $n, $singular, $active) : $err")
+        result.time_JuMP = error_v(V)
+        result.f_JuMP = error_v(V)
+        result.df_JuMP = error_v(V)
+        result.x_JuMP = error_v(V)
+        result.unf_JuMP = error_v(V)
+        result.unf_JuMP_1 = error_v(V)
     end
 
 
-    # benchmark EKHeuristic (after Ipopt)
-    println("Ipopt_EK")
+    # benchmark EKHeuristic (after JuMP)
+    println("JuMP_EK")
     try
-        if !("Ipopt_EK" in todos)
+        if !("JuMP_EK" in todos)
             error("SKIP")
         end
         if "time" in todos
             bm = @benchmark (
-                $(cache)["Ipopt_EK"] =
-                    Optimization.MinCostFlow.EKHeuristic($(problem), $(cache)["x_Ipopt"]; ϵ=1e-16) |>
+                $(cache)["JuMP_EK"] =
+                    Optimization.MinCostFlow.EKHeuristic($(problem), $(cache)["x_JuMP"]; ϵ=1e-16) |>
                     heu -> (init!(heu); run!(heu))) evals=1 samples=1 seconds=1e-9
-            result.time_Ipopt_EK = minimum(bm).time
+            result.time_JuMP_EK = minimum(bm).time
         else
-            cache["Ipopt_EK"] =
-                Optimization.MinCostFlow.EKHeuristic(problem, cache["x_Ipopt"]; ϵ=1e-16) |>
+            cache["JuMP_EK"] =
+                Optimization.MinCostFlow.EKHeuristic(problem, cache["x_JuMP"]; ϵ=1e-16) |>
                 heu -> (init!(heu); run!(heu))
-            result.time_Ipopt_EK = error_v(Float64)
+            result.time_JuMP_EK = error_v(Float64)
         end
-        cache["x_Ipopt_EK"], cache["Δ_Ipopt_EK"] = cache["Ipopt_EK"]
-        result.f_Ipopt_EK = get_f(cache["x_Ipopt_EK"])
-        result.df_Ipopt_EK = get_df(cache["x_Ipopt_EK"])
-        result.x_Ipopt_EK = norm(cache["x_Ipopt_EK"])
-        let Exb = cache["Δ_Ipopt_EK"]
-            result.unf_Ipopt_EK = norm(Exb)
-            result.unf_Ipopt_EK_1 = norm(Exb, 1)
+        cache["x_JuMP_EK"], cache["Δ_JuMP_EK"] = cache["JuMP_EK"]
+        result.f_JuMP_EK = get_f(cache["x_JuMP_EK"])
+        result.df_JuMP_EK = get_df(cache["x_JuMP_EK"])
+        result.x_JuMP_EK = norm(cache["x_JuMP_EK"])
+        let Exb = cache["Δ_JuMP_EK"]
+            result.unf_JuMP_EK = norm(Exb)
+            result.unf_JuMP_EK_1 = norm(Exb, 1)
         end
     catch err
-        println("Ipopt EK : ($m, $n, $singular, $active) : $err")
-        result.time_Ipopt_EK = error_v(V)
-        result.f_Ipopt_EK = error_v(V)
-        result.df_Ipopt_EK = error_v(V)
-        result.x_Ipopt_EK = error_v(V)
-        result.unf_Ipopt_EK = error_v(V)
-        result.unf_Ipopt_EK_1 = error_v(V)
+        println("JuMP EK : ($m, $n, $singular, $active) : $err")
+        result.time_JuMP_EK = error_v(V)
+        result.f_JuMP_EK = error_v(V)
+        result.df_JuMP_EK = error_v(V)
+        result.x_JuMP_EK = error_v(V)
+        result.unf_JuMP_EK = error_v(V)
+        result.unf_JuMP_EK_1 = error_v(V)
     end
 
-    # benchmark strict SPEKHeuristic (after Ipopt)
-    println("Ipopt_SPEK")
+    # benchmark strict SPEKHeuristic (after JuMP)
+    println("JuMP_SPEK")
     try
-        if !("Ipopt_SPEK" in todos)
+        if !("JuMP_SPEK" in todos)
             error("SKIP")
         end
         if "time" in todos
             bm = @benchmark (
-                $(cache)["Ipopt_SPEK"] =
-                    Optimization.MinCostFlow.SPEKHeuristic($(problem), $(Q)*$(cache)["x_Ipopt"]+$(q), $(cache)["x_Ipopt"]; ϵ=1e-14, ϵₚ=1e-10) |>
+                $(cache)["JuMP_SPEK"] =
+                    Optimization.MinCostFlow.SPEKHeuristic($(problem), $(Q)*$(cache)["x_JuMP"]+$(q), $(cache)["x_JuMP"]; ϵ=1e-14, ϵₚ=1e-10) |>
                     heu -> (init!(heu); run!(heu))) evals=1 samples=1 seconds=1e-9
-            result.time_Ipopt_SPEK = minimum(bm).time
+            result.time_JuMP_SPEK = minimum(bm).time
         else
-            cache["Ipopt_SPEK"] =
-                Optimization.MinCostFlow.SPEKHeuristic(problem, Q*cache["x_Ipopt"]+q, cache["x_Ipopt"]; ϵ=1e-14, ϵₚ=1e-10) |>
+            cache["JuMP_SPEK"] =
+                Optimization.MinCostFlow.SPEKHeuristic(problem, Q*cache["x_JuMP"]+q, cache["x_JuMP"]; ϵ=1e-14, ϵₚ=1e-10) |>
                 heu -> (init!(heu); run!(heu))
-            result.time_Ipopt_SPEK = error_v(Float64)
+            result.time_JuMP_SPEK = error_v(Float64)
         end
-        cache["x_Ipopt_SPEK"], cache["Δ_Ipopt_SPEK"] = cache["Ipopt_SPEK"]
-        result.f_Ipopt_SPEK = get_f(cache["x_Ipopt_SPEK"])
-        result.df_Ipopt_SPEK = get_df(cache["x_Ipopt_SPEK"])
-        result.x_Ipopt_SPEK = norm(cache["x_Ipopt_SPEK"])
-        let Exb = cache["Δ_Ipopt_SPEK"]
-            result.unf_Ipopt_SPEK = norm(Exb)
-            result.unf_Ipopt_SPEK_1 = norm(Exb, 1)
+        cache["x_JuMP_SPEK"], cache["Δ_JuMP_SPEK"] = cache["JuMP_SPEK"]
+        result.f_JuMP_SPEK = get_f(cache["x_JuMP_SPEK"])
+        result.df_JuMP_SPEK = get_df(cache["x_JuMP_SPEK"])
+        result.x_JuMP_SPEK = norm(cache["x_JuMP_SPEK"])
+        let Exb = cache["Δ_JuMP_SPEK"]
+            result.unf_JuMP_SPEK = norm(Exb)
+            result.unf_JuMP_SPEK_1 = norm(Exb, 1)
         end
     catch err
-        println("Ipopt SPEK : ($m, $n, $singular, $active) : $err")
-        result.time_Ipopt_SPEK = error_v(V)
-        result.f_Ipopt_SPEK = error_v(V)
-        result.df_Ipopt_SPEK = error_v(V)
-        result.x_Ipopt_SPEK = error_v(V)
-        result.unf_Ipopt_SPEK = error_v(V)
-        result.unf_Ipopt_SPEK_1 = error_v(V)
+        println("JuMP SPEK : ($m, $n, $singular, $active) : $err")
+        result.time_JuMP_SPEK = error_v(V)
+        result.f_JuMP_SPEK = error_v(V)
+        result.df_JuMP_SPEK = error_v(V)
+        result.x_JuMP_SPEK = error_v(V)
+        result.unf_JuMP_SPEK = error_v(V)
+        result.unf_JuMP_SPEK_1 = error_v(V)
     end
 
     # benchmark SPEKHeuristic (after min-norm ϵ-subgradient)
-    println("Ipopt_SPEKn")
+    println("JuMP_SPEKn")
     try
-        if !("Ipopt_SPEKn" in todos)
+        if !("JuMP_SPEKn" in todos)
             error("SKIP")
         end
         if "time" in todos
             bm = @benchmark (
-                $(cache)["Ipopt_SPEKn"] =
-                    Optimization.MinCostFlow.SPEKHeuristic($(problem), $(Q)*$(cache)["x_Ipopt"]+$(q), $(cache)["x_Ipopt"]; ϵ=1e-14, ϵₚ=1e-10, strict=false) |>
+                $(cache)["JuMP_SPEKn"] =
+                    Optimization.MinCostFlow.SPEKHeuristic($(problem), $(Q)*$(cache)["x_JuMP"]+$(q), $(cache)["x_JuMP"]; ϵ=1e-14, ϵₚ=1e-10, strict=false) |>
                     heu -> (init!(heu); run!(heu))) evals=1 samples=1 seconds=1e-9
-            result.time_Ipopt_SPEKn = minimum(bm).time
+            result.time_JuMP_SPEKn = minimum(bm).time
         else
-            cache["Ipopt_SPEKn"] =
-                Optimization.MinCostFlow.SPEKHeuristic(problem, Q*cache["x_Ipopt"]+q, cache["x_Ipopt"]; ϵ=1e-14, ϵₚ=1e-10, strict=false) |>
+            cache["JuMP_SPEKn"] =
+                Optimization.MinCostFlow.SPEKHeuristic(problem, Q*cache["x_JuMP"]+q, cache["x_JuMP"]; ϵ=1e-14, ϵₚ=1e-10, strict=false) |>
                 heu -> (init!(heu); run!(heu))
-            result.time_Ipopt_SPEKn = error_v(Float64)
+            result.time_JuMP_SPEKn = error_v(Float64)
         end
-        cache["x_Ipopt_SPEKn"], cache["Δ_Ipopt_SPEKn"] = cache["Ipopt_SPEKn"]
-        result.f_Ipopt_SPEKn = get_f(cache["x_Ipopt_SPEKn"])
-        result.df_Ipopt_SPEKn = get_df(cache["x_Ipopt_SPEKn"])
-        result.x_Ipopt_SPEKn = norm(cache["x_Ipopt_SPEKn"])
-        let Exb = cache["Δ_Ipopt_SPEKn"]
-            result.unf_Ipopt_SPEKn = norm(Exb)
-            result.unf_Ipopt_SPEKn_1 = norm(Exb, 1)
+        cache["x_JuMP_SPEKn"], cache["Δ_JuMP_SPEKn"] = cache["JuMP_SPEKn"]
+        result.f_JuMP_SPEKn = get_f(cache["x_JuMP_SPEKn"])
+        result.df_JuMP_SPEKn = get_df(cache["x_JuMP_SPEKn"])
+        result.x_JuMP_SPEKn = norm(cache["x_JuMP_SPEKn"])
+        let Exb = cache["Δ_JuMP_SPEKn"]
+            result.unf_JuMP_SPEKn = norm(Exb)
+            result.unf_JuMP_SPEKn_1 = norm(Exb, 1)
         end
     catch err
-        println("Ipopt SPEKn : ($m, $n, $singular, $active) : $err")
-        result.time_Ipopt_SPEKn = error_v(V)
-        result.f_Ipopt_SPEKn = error_v(V)
-        result.df_Ipopt_SPEKn = error_v(V)
-        result.x_Ipopt_SPEKn = error_v(V)
-        result.unf_Ipopt_SPEKn = error_v(V)
-        result.unf_Ipopt_SPEKn_1 = error_v(V)
+        println("JuMP SPEKn : ($m, $n, $singular, $active) : $err")
+        result.time_JuMP_SPEKn = error_v(V)
+        result.f_JuMP_SPEKn = error_v(V)
+        result.df_JuMP_SPEKn = error_v(V)
+        result.x_JuMP_SPEKn = error_v(V)
+        result.unf_JuMP_SPEKn = error_v(V)
+        result.unf_JuMP_SPEKn_1 = error_v(V)
     end
 
     result, is, Ls

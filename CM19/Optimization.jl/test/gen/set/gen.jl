@@ -41,3 +41,9 @@ for filename in readdir(path)
     qfc_file = filename[1:end-3]*"qfc"
     run(`./Optimization.jl/test/gen/qfcgen $path$filename`)
 end
+
+include("../../dmacio.jl")
+problems = parse_dir(NetgenDIMACS, "Optimization.jl/test/gen/set/")
+
+problem = parse(NetgenDIMACS, "Optimization.jl/test/gen/set/netgen-1000-1-1-b-b-ns")
+parames = pargen_name_to_params("netgen-1000-1-1-a-a-ns.dmx")

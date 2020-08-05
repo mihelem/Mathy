@@ -1,6 +1,5 @@
 include("benchmark.jl")
-# possible heuristics:
-# min_grad, EK, mg_EK, SPEK, mg_SPEK, SPEKn, mgSPEKn
+
 heus = ["min_grad", "EK", "mg_EK", "SPEK", "mg_SPEK", "SPEKn", "mg_SPEKn"]
 mutable struct Result
     ϵᵣ
