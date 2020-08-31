@@ -499,6 +499,146 @@ function run_experiment(problem, max_iter, type, result, todos=Set{String}(["dua
         )
 end
 
+#=
+    START NEEDED ITERATIONS MEASURE
+=#
+
+using Optimization
+problems = parse_dir(NetgenDIMACS, "CM19/Optimization.jl/test/gen/set/")
+
+function exp_search(f, rng::Tuple{Int64, Int64})
+
+    b, e = rng
+    step = 1
+    x = b
+    u = e+1
+    while (x ≤ e) && !f(x)
+        print("*")
+        x = b+step
+        step *= 2
+    end
+    step = step ÷ 2
+    bin_search(f, (x-step, min(e, x)))
+end
+
+function bin_search(f, rng::Tuple{Int64, Int64})
+    b, e = rng
+    while e≥b
+        print("°")
+        m = (b+e)÷2
+        if !f(m)
+            b = m+1
+        else
+            e = m-1
+        end
+    end
+    e+1
+end
+
+function solvable_to(
+    problem::QMCFBProblem,
+    L::Float64,
+    ϵ::Float64,
+    hiter::Int64,
+    iter::Int64,
+    ::Type{SG},
+    sg_args::Tuple,
+    sg_kwargs::NamedTuple,
+    sg_update,
+    restart::Bool;
+    μ₀::Array{Float64, 1}) where {SG <: SubgradientMethod}
+
+    subgradient = SG(sg_args...; sg_kwargs...)
+    algorithm = QMCFBPAlgorithmD1SG(;
+        localization=subgradient,
+        verbosity=0,
+        max_iter=iter,
+        μ₀=μ₀,
+        ε=1e-6,
+        ϵ=1e-12)
+    test = get_test(algorithm; problem=problem, type=Float64)
+    for i in 1:hiter
+        run!(test)
+        set!(algorithm, test.result)      # set initial status of algorithm
+        algorithm.stopped = !restart      # not stopped implies re-init subgradient method
+        sg_update(subgradient)
+    end
+    L_best = test.result.result["L_best"]
+    abs(L_best-L)/abs(L) < ϵ
+end
+
+function table_of_needed_iterations(
+    problem::QMCFBProblem,
+    ϵs::Array{Float64, 1},
+    hiters::Array{Int64, 1},
+    max_total_iter::Int64,
+    ::Type{SG},
+    sg_args::Tuple,
+    sg_kwargs::NamedTuple,
+    sg_update,
+    restart::Bool) where {SG <: SubgradientMethod}
+
+    table = Int64[]
+
+    model=solveQMCFBP(problem)
+    L = begin
+        if termination_status(model) == MOI.OPTIMAL
+            objective_value(model)
+        else
+            Inf
+        end
+    end
+
+    if L == Inf
+        return table
+    end
+
+    m, n = size(problem.E)
+    μ₀ = rand(Float64, m)
+
+    # Table: ϵ x hiter
+    max_total_iter′ = max_total_iter
+    for ϵ in ϵs
+        for hiter in hiters
+            function f(iter::Int64)
+                solvable_to(
+                    problem,
+                    L,
+                    ϵ,
+                    hiter,
+                    iter,
+                    SG,
+                    sg_args,
+                    sg_kwargs,
+                    sg_update,
+                    restart;
+                    μ₀=μ₀)
+            end
+            max_iter = max_total_iter′÷hiter
+            iter = exp_search(f, (1, max_iter))
+            push!(table, iter≤max_iter ? iter : -1)
+        end
+    end
+    table
+end
+
+tables = Dict{String, Array{Int64, 2}}()
+pname = "netgen-1000-1-4-a-a-ns-0330"
+tables["netgen-1000-1-4-a-a-ns-0330"] =
+    table_of_needed_iterations(
+        problems[pname],
+        [0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001],
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        100000,
+        Subgradient.NesterovMomentum,
+        (),
+        (α=1.0, β=0.995),
+        sg->sg.α/=2,
+        true)
+#=
+    END NEEDED ITERATIONS MEASURE
+=#
+
 
 
 #=
