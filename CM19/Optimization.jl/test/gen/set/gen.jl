@@ -1,10 +1,10 @@
 # Generate instances with PARGEN+NETGEN+QFCGEN
 
 # generate the parameter files
-function doit(k)
+function doit(K)
     for n in 1000
         for ρ in 1:3
-            for k in 1:5
+            for k in 1:K
                 for cf in ['a', 'b']
                     for cq in ['a', 'b']
                         for scale in ["ns"]
@@ -17,9 +17,12 @@ function doit(k)
     end
 end
 
+n, ρ, k, cf, cq, scale = 50000, 1, 1, "a", "a", "ns"
+run(`./Optimization.jl/test/gen/pargen $n $ρ $k $cf $cq $scale`)
+
 doit(1)
 # generate with netgen the network file
-path = "./Optimization.jl/test/gen/set/"
+path = "./Optimization.jl/test/gen/set2/"
 for filename in readdir(path)
     if endswith(filename, ".par") == false
         continue
@@ -42,8 +45,41 @@ for filename in readdir(path)
     run(`./Optimization.jl/test/gen/qfcgen $path$filename`)
 end
 
+function add_singular(problems::Dict{String, QMCFBProblem},
+    singulars::Array{Float64, 1})
+
+    result = Dict{String, QMCFBProblem}()
+    for (name, problem) in problems
+        m, n = size(problem.E)
+        ss = convert.(Int64, ceil.(singulars.*n))
+        digits = length(string(maximum(ss)))
+        for s in ss
+            newname = name*"-"*lpad(s, digits, '0')
+            result[newname] = deepcopy(problem)
+            Q╲ = view(result[newname].Q, [CartesianIndex(i, i) for i in 1:n])
+            Q╲[end-s+1:end] .= 0
+        end
+    end
+    result
+end
+
+sproblems = add_singular(problems, [0.0, 0.33, 0.66, 1.0])
+for (name, problem) in sproblems
+    fullname = "Optimization.jl/test/gen/set2/"*name
+    write(NetgenDIMACS, fullname, problem)
+end
+
+
 include("../../dmacio.jl")
-problems = parse_dir(NetgenDIMACS, "Optimization.jl/test/gen/set/")
+problems = parse_dir(NetgenDIMACS, "Optimization.jl/test/gen/set2/")
 
 problem = parse(NetgenDIMACS, "Optimization.jl/test/gen/set/netgen-1000-1-1-b-b-ns")
-parames = pargen_name_to_params("netgen-1000-1-1-a-a-ns.dmx")
+parames = parse(PargenParams, "netgen-1000-1-1-a-a-ns.dmx")
+parames = parse(TestgenParams, "netgen-1000-1-1-a-a-ns-666.dmx")
+
+mypath = "Optimization.jl/test/gen/set/"
+for filename in readdir(mypath)
+    if length(split(filename, '-')) == 7
+        rm(mypath*filename)
+    end
+end

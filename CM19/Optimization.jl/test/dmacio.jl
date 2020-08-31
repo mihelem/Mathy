@@ -64,6 +64,11 @@ function Base.parse(::Type{TestgenParams}, name::String)
         parse(Int64, split(token[8], '.')[1]))
 end
 
+function Base.string(params::TestgenParams)
+    "netgen-"*string(params.n)*"-"*string(params.ρ)*"-"*string(params.k)*"-"*params.cf*"-"*params.cq*
+        "-"*params.scale*"-"*lpad(string(params.singular), Int64(ceil(log10(params.n)))+1, '0')
+end
+
 # qfc -> Q, 𝔮
 # Q : diagonal quadratic cost matrix
 # 𝔮 : fixed cost vector

@@ -57,6 +57,7 @@ mutable struct WithParameterSearch{P<:OptimizationProblem, A<:OptimizationAlgori
     algorithm_iter                  # number of iterations in the algorithm
     algorithm_iter_per_search       # iterations per search
     δ                               # fraction of iterations evaluated in search
+    restart_params                  # reset the params simplex in each cycle
 
     params                          # WIP
     function WithParameterSearch{P, A, S}(;
@@ -69,7 +70,8 @@ mutable struct WithParameterSearch{P<:OptimizationProblem, A<:OptimizationAlgori
         searcher_iter=nothing,
         algorithm_iter=nothing,
         algorithm_iter_per_search=nothing,
-        δ=nothing) where {P<:OptimizationProblem, S<:LocalizationMethod, A<:OptimizationAlgorithm{P}}
+        δ=nothing,
+        restart_params=false) where {P<:OptimizationProblem, S<:LocalizationMethod, A<:OptimizationAlgorithm{P}}
 
         M = new{P, A, S}(algorithm, searcher, objective)
         if objective !== nothing
@@ -85,7 +87,8 @@ mutable struct WithParameterSearch{P<:OptimizationProblem, A<:OptimizationAlgori
             searcher_iter=searcher_iter,
             algorithm_iter=algorithm_iter,
             algorithm_iter_per_search=algorithm_iter_per_search,
-            δ=δ)
+            δ=δ,
+            restart_params=restart_params)
     end
 end
 function set!(M::WithParameterSearch{<:OptimizationProblem, <:OptimizationAlgorithm, <:LocalizationMethod};
@@ -94,7 +97,8 @@ function set!(M::WithParameterSearch{<:OptimizationProblem, <:OptimizationAlgori
     searcher_iter=nothing,
     algorithm_iter=nothing,
     algorithm_iter_per_search=nothing,
-    δ=nothing)
+    δ=nothing,
+    restart_params=nothing)
 
     @some M.param_ranges = param_ranges
     M.fixed_params = fixed_params
@@ -103,16 +107,17 @@ function set!(M::WithParameterSearch{<:OptimizationProblem, <:OptimizationAlgori
     @some M.algorithm_iter = algorithm_iter
     @some M.algorithm_iter_per_search = algorithm_iter_per_search
     @some M.δ = δ
+    @some M.restart_params = restart_params
     M
 end
 function run!(
     M::WithParameterSearch{P, A, NelderMead},
-    𝔓::P;
+    problem::P;
     memoranda=Set([])) where {P<:OptimizationProblem, A<:OptimizationAlgorithm}
 
     @init_memoria memoranda
     @unpack algorithm, searcher, fixed_params, param_ranges, searcher_iter,
-            algorithm_iter, algorithm_iter_per_search, δ = M
+            algorithm_iter, algorithm_iter_per_search, δ, restart_params = M
     localization = algorithm.localization
 
     # Simplex for Nelder Mead
@@ -135,6 +140,7 @@ function run!(
         push!(S, deepcopy(params_v))
         S[end][i] = params_r[i][2]
     end
+    S₀ = deepcopy(S)
 
     function gen_f(algorithm, iter)
         function f(params_v′)
@@ -144,7 +150,7 @@ function run!(
             algorithm′.max_iter = iter
             # TODO: memoria
             # TODO: verbosity
-            run!(algorithm′, 𝔓, memoranda=memoranda)
+            run!(algorithm′, problem, memoranda=memoranda)
         end
         f
     end
@@ -172,13 +178,19 @@ function run!(
                 end
             # set!(algorithm_best, result_best)   # trial
         end
-        S = searcher.S
+        S = begin
+            if restart_params
+                deepcopy(S₀)
+            else
+                searcher.S
+            end
+        end
         set!(algorithm_best, result_best)
         # loky = algorithm_best.localization
         # @memento loky = loky
         set_params!(algorithm_best, params_best)
         algorithm_best.max_iter = iter_with_no_search
-        @memento result_best = run!(algorithm_best, 𝔓, memoranda=memoranda)
+        @memento result_best = run!(algorithm_best, problem, memoranda=memoranda)
         set!(algorithm_best, result_best)
     end
     hyper_result = @get_result params_best

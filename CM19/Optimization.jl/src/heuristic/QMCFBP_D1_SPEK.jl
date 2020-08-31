@@ -89,7 +89,7 @@ function run!(H::SPEKHeuristic)
         b′[node] += flux
         # println("flux: $flux => b′[$sink] -= $flux,  b′[$node] += $flux")
     end
-    function get_dist!(distances, sources, visit_d, in_queue, parent, visit_count)
+    function get_dist!(distances, sources, visit_d, in_queue, parent, visit_count, ϵₚ=ϵₚ)
         dist_sum = 0
         function pop_node()
             node = popfirst!(visit_d)
@@ -155,6 +155,7 @@ function run!(H::SPEKHeuristic)
                 end
             end
         end
+
         #println()
         visit_count .= 0
     end
@@ -173,7 +174,17 @@ function run!(H::SPEKHeuristic)
         end
         flown = false
 
-        get_dist!(distances, sources, visit_d, in_queue, parent, visit_count)
+        got_dist = false
+        ϵₚ′ = ϵₚ
+        while got_dist == false
+            got_dist = true
+            try
+                get_dist!(distances, sources, visit_d, in_queue, parent, visit_count, ϵₚ′)
+            catch e
+                got_dist = false
+                ϵₚ′ = 2*ϵₚ′
+            end
+        end
 
         sinks = findall(b′ .> ϵ)
         sinks = sinks[distances[sinks] .< unreachable]

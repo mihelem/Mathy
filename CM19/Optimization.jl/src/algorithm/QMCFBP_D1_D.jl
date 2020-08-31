@@ -115,7 +115,7 @@ import Base.Order.lt
 lt(o::Oᾱ, a::Tuple{AbstractFloat, CartesianIndex{2}}, b::Tuple{AbstractFloat, CartesianIndex{2}})
 ```
 
-Implements an ordering which should partially obviate to the problems of floating point number errors
+Implements an ordering which should partially obviate to the problems of numerical errors
 occurring while sorting the crossing points of a line search with a set of hyperplanes.
 It is based on the idea that, for a compact convex body, there is at most one ingoing and one outgoing crossing point.
 

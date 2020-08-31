@@ -4,7 +4,7 @@
 # time_dual time_min_grad time_EK time_SPEK time_SPEKn time_JuMP time_JuMP_EK time_JuMP_SPEK time_JuMP_SPEKn
 # (time is in nanoseconds)
 using Optimization, LinearAlgebra, Parameters, BenchmarkTools, Profile
-include("../test/nljumpy.jl")
+# include("../test/nljumpy.jl")
 
 mutable struct BenchResult{V}
     nodes::Int64
@@ -94,7 +94,7 @@ mutable struct BenchResult{V}
     BenchResult{V}(nodes, arcs, singular, active) where {V} = new{V}(nodes, arcs, singular, active)
 end
 Base.show(io::IO, result::BenchResult{V}) where{V} = begin
-    names = fieldnames(BenchResult)
+    names = fieldnames(BenchResult{V})
     for name in names[1:end-1]
         print(io, getfield(result, name) |> a-> (is_error_v(a) ? "error" : a), " ")
     end
@@ -140,6 +140,7 @@ function run_bench(
     max_iter::Int64=4000,
     max_hiter::Int64=40,
     restart::Bool=true,
+    ext_solver=nothing,
     todos::Set=Set{String}(["dual", "min_grad", "mg_EK", "mg_SPEK", "mg_SPEKn",
         "JuMP", "JuMP_EK", "JuMP_SPEK", "JuMP_SPEKn", "time", "plot"])) where {V, SG<:SubgradientMethod}
 
@@ -459,16 +460,16 @@ function run_bench(
     # benchmark JuMP
     println("JuMP")
     try
-        if !("JuMP" in todos)
+        if !("JuMP" in todos) || (ext_solver === nothing)
             error("SKIP")
         end
         if "time" in todos
             bm = @benchmark ($(cache)["x_JuMP"] =
-                get_solution_quadratic_box_constrained($(problem), zeros(Float64, $(n)))) evals=1 samples=1 seconds=1e-9
+                ext_solver($(problem), zeros(Float64, $(n)))) evals=1 samples=1 seconds=1e-9
             result.time_JuMP = minimum(bm).time
         else
             cache["x_JuMP"] =
-                get_solution_quadratic_box_constrained(problem, zeros(Float64, n))
+                ext_solver(problem, zeros(Float64, n))
             result.time_JuMP = error_v(Float64)
         end
         cache["x_JuMP"] = max.(min.(cache["x_JuMP"], u), l)

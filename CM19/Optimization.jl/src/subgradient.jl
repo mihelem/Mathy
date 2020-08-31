@@ -489,7 +489,9 @@ mutable struct RMSProp <: DeflectedSubgradientMethod
     RMSProp(; α=nothing, γ=nothing, ϵ=1e-14) = begin
         M = new()
         @some M.α = α
-        @some M.γ = γ
+        if γ !== nothing
+            M.γ = max(min(γ, 1.0), 0.0)
+        end
         M.ϵ = ϵ
         M.params = Dict(:α => [0.0, 1.0], :γ => [0.0, 1.0])
         M
@@ -500,7 +502,7 @@ function init!(M::RMSProp, f, ∂f, x)
     M
 end
 function step!(M::RMSProp, f, ∂f, x)
-    α, γ, ϵ, s, g = M.α, M.γ, M.ϵ, M.s, ∂f(x)
+    α, γ, ϵ, s, g = M.α, max(min(M.γ, 1.0), 0.0), M.ϵ, M.s, ∂f(x)
     s[:] = γ*s + (1-γ)*(g .* g)
     g′ = g ./ (sqrt.(s) .+ ϵ)
     (x - α*g′, α, g′)
@@ -514,10 +516,14 @@ mutable struct Adadelta <: DeflectedSubgradientMethod
     s # sum of squared gradients
     u # sum of squared gradients
     params
-    Adadelta(;γs=nothing, γx=nothing, ϵ=1e-8) = begin
+    Adadelta(;γs=nothing, γx=nothing, ϵ=1e-14) = begin
         M = new()
-        @some M.γs = γs
-        @some M.γx = γx
+        if γs !== nothing
+            M.γs = max(min(γs, 1.0), 0.0)
+        end
+        if γx !== nothing
+            M.γx = max(min(γx, 1.0), 0.0)
+        end
         M.ϵ = ϵ
         M.params = Dict(:γs => [0.0, 1.0], :γx => [0.0, 1.0])
         M
@@ -529,7 +535,7 @@ function init!(M::Adadelta, f, ∂f, x)
     return M
 end
 function step!(M::Adadelta, f, ∂f, x)
-    γs, γx, ϵ, s, u, g = M.γs, M.γx, M.ϵ, M.s, M.u, ∂f(x)
+    γs, γx, ϵ, s, u, g = max(min(M.γs, 1.0), 0.0), max(min(M.γx, 1.0), 0.0), M.ϵ, M.s, M.u, ∂f(x)
     s[:] = γs*s + (1-γs)*g.*g
     Δx = - (sqrt.(u) .+ ϵ) ./ (sqrt.(s) .+ ϵ) .* g
     u[:] = γx*u + (1-γx)*Δx.*Δx
@@ -549,8 +555,12 @@ mutable struct Adam <: DeflectedSubgradientMethod
     Adam(;α=nothing, γv=nothing, γs=nothing, ϵ=1e-14) = begin
         M = new()
         @some M.α = α
-        @some M.γv = γv
-        @some M.γs = γs
+        if γs !== nothing
+            M.γs = max(min(γs, 1.0), 0.0)
+        end
+        if γv !== nothing
+            M.γv = max(min(γv, 1.0), 0.0)
+        end
         M.ϵ = ϵ
         M.params = Dict(:α => [0.0, 1.0], :γv => [0.0, 1.0], :γs => [0.0, 1.0])
         M
@@ -563,8 +573,8 @@ function init!(M::Adam, f, ∂f, x)
     M
 end
 function step!(M::Adam, f, ∂f, x)
-    α, γv, γs, ϵ, k = M.α, M.γv, M.γs, M.ϵ, M.k
-    s, v, g = M.s, M.v, ∇f(x)
+    α, γv, γs, ϵ, k = M.α, max(min(M.γv, 1.0), 0.0), max(min(M.γs, 1.0), 0.0), M.ϵ, M.k
+    s, v, g = M.s, M.v, ∂f(x)
     v[:] = γv*v + (1-γv)*g
     s[:] = γs*s + (1-γs)*g.*g
     M.k = k += 1
