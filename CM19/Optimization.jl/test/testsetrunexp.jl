@@ -502,11 +502,17 @@ end
 #=
     START NEEDED ITERATIONS MEASURE
 =#
+using Distributed
+addprocs(24)
 
-using Optimization
+@everywhere push!(LOAD_PATH, "/home/mihele/Source/julia/git/CM19/Optimization.jl/")
+@everywhere using Optimization
+@everywhere include("/home/mihele/Source/julia/git/CM19/Optimization.jl/test/dmacio.jl")
+@everywhere include("/home/mihele/Source/julia/git/CM19/Optimization.jl/test/grb.jl")
+
 problems = parse_dir(NetgenDIMACS, "CM19/Optimization.jl/test/gen/set/")
 
-function exp_search(f, rng::Tuple{Int64, Int64})
+@everywhere function exp_search(f, rng::Tuple{Int64, Int64})
 
     b, e = rng
     step = 1
@@ -521,7 +527,7 @@ function exp_search(f, rng::Tuple{Int64, Int64})
     bin_search(f, (x-step, min(e, x)))
 end
 
-function bin_search(f, rng::Tuple{Int64, Int64})
+@everywhere function bin_search(f, rng::Tuple{Int64, Int64})
     b, e = rng
     while e≥b
         print("°")
@@ -535,7 +541,7 @@ function bin_search(f, rng::Tuple{Int64, Int64})
     e+1
 end
 
-function solvable_to(
+@everywhere function solvable_to(
     problem::QMCFBProblem,
     L::Float64,
     ϵ::Float64,
@@ -567,7 +573,7 @@ function solvable_to(
     abs(L_best-L)/abs(L) < ϵ
 end
 
-function table_of_needed_iterations(
+@everywhere function table_of_needed_iterations(
     problem::QMCFBProblem,
     ϵs::Array{Float64, 1},
     hiters::Array{Int64, 1},
@@ -590,7 +596,7 @@ function table_of_needed_iterations(
     end
 
     if L == Inf
-        return table
+        return reshape(table, length(hiters), :)
     end
 
     m, n = size(problem.E)
@@ -599,7 +605,9 @@ function table_of_needed_iterations(
     # Table: ϵ x hiter
     max_total_iter′ = max_total_iter
     for ϵ in ϵs
+        print("\nϵ=$ϵ")
         for hiter in hiters
+            print("\n\thiter=", lpad(string(hiter), 2, '0'), "  ::  ")
             function f(iter::Int64)
                 solvable_to(
                     problem,
@@ -619,22 +627,81 @@ function table_of_needed_iterations(
             push!(table, iter≤max_iter ? iter : -1)
         end
     end
-    table
+    reshape(table, length(hiters), :)
 end
 
 tables = Dict{String, Array{Int64, 2}}()
+
+tables
+plot(tables["netgen-1000-1-4-a-a-ns-0330"] .* [1:20;])
+function make_tables(
+    problems::Dict{String, QMCFBProblem},
+    tables::Dict{String, Array{Int64, 2}},
+    ϵs::Array{Float64, 1},
+    hiters::Array{Int64, 1},
+    max_total_iter::Int64,
+    ::Type{SG},
+    sg_args::Tuple,
+    sg_kwargs::NamedTuple,
+    sg_update,
+    restart::Bool) where {SG <: SubgradientMethod}
+
+    names = [pname for pname in keys(problems) if !haskey(tables, pname)]
+
+    fs = Dict{String,Future}()
+    @sync for pname in names
+        @async fs[pname] = @spawn table_of_needed_iterations(
+            problems[pname],
+            ϵs,
+            hiters,
+            max_total_iter,
+            SG,
+            sg_args,
+            sg_kwargs,
+            sg_update,
+            restart)
+    end
+
+    @sync for pname in names
+        @async tables[pname] = fetch(fs[pname])
+    end
+end
+#ϵs = [0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001]
+ϵs = [0.1]
+hiters = [1:2;]
+#hiters = [1:20;]
+make_tables(
+    problems,
+    tables,
+    ϵs,
+    hiters,
+    100000,
+    Subgradient.NesterovMomentum,
+    (),
+    (α=1.0, β=0.995),
+    sg->sg.α/=2,
+    true)
+
+tables
+using JLD
+save("tables.jld", "tables", tables)
 pname = "netgen-1000-1-4-a-a-ns-0330"
 tables["netgen-1000-1-4-a-a-ns-0330"] =
     table_of_needed_iterations(
         problems[pname],
-        [0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001],
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        [0.1],
+        [1:2;],
+        #[0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001],
+        #[1:20;],
         100000,
         Subgradient.NesterovMomentum,
         (),
         (α=1.0, β=0.995),
         sg->sg.α/=2,
         true)
+
+table = tables["netgen-1000-1-4-a-a-ns-0330"] .* [1:20;]
+plot(table)
 #=
     END NEEDED ITERATIONS MEASURE
 =#
