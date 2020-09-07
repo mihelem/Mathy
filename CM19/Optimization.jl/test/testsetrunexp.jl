@@ -707,17 +707,23 @@ for (name, arr) in tables_tot
         arr[arr .== maximum(arr)] .= 100001
     end
 end
+tables
 snames = sort([keys(tables_tot)...])
 tables_tot_minite = Dict{String, Array{Int64, 1}}()
+tables_tot_miniph = Dict{String, Array{Int64, 1}}()
 tables_tot_minhit = Dict{String, Array{Int64, 1}}()
 unsolvables = [name for (name, arr) in tables_tot if size(arr)[2]==0]
 sort!(unsolvables)
+tables_tot
+tables_tot_miniph
 for (name, arr) in tables_tot
     if size(arr)[2]>0
+        tables_tot_miniph[name] =
         tables_tot_minite[name] = [minimum(c) for c in eachcol(arr)]
         tables_tot_minite[name][tables_tot_minite[name] .== 100001] .= 200000
+            [(minimum(arr[:, i]) == 100001 ? 100001 : tables[name][argmin(arr[:, i]), i]) for i in 1:size(arr, 2)]
         tables_tot_minhit[name] =
-                [(minimum(c) == 100001 ? 40 : argmin(c)) for c in eachcol(arr)]
+            [(minimum(c) == 100001 ? 40 : argmin(c)) for c in eachcol(arr)]
     end
 end
 tables_tot_minite
@@ -759,7 +765,8 @@ function plot_by_setup(
     cf::Char,       # linear to fixed cost, 'a': high, 'b': low (CHECK)
     cq::Char,       # quadratic to fixed cost, 'a': high, 'b': low (CHECK)
     scale::String,  # scale arc capacity by 0.7 if "s", no action if "ns"
-    singular::Int64)
+    singular::Int64,
+    tables::Dict{String, Array{Int64, 2}})
 
     setups = [TestgenParams(PargenParams(n, ρ, k, cf, cq, scale), singular) for k in ks]
     names = [string(setup) for setup in setups]
@@ -769,11 +776,7 @@ function plot_by_setup(
     malphas = [0.7, 0.5, 0.5, 1.0, 1.0, 1.0, 0.7]
     pu = plot()
     # Plot by instance comparing singular percentage
-    title = split(string(setups[1]), "-") |>
-        tokens -> begin
-            tokens[3] = "*"
-            join(tokens, "-")
-        end
+    title = get_setup_name(setups)
     ylimsmin = Inf
     ylimsmax = -Inf
     for i in eachindex(ks)
@@ -794,7 +797,7 @@ function plot_by_setup(
                 seriestype=:scatter,
                 legend=:topleft,
                 xlabel=L"\epsilon_{rel}",
-                ylabel="total iterations",
+                ylabel="iterations per stage",
                 title=title,
                 xaxis=:log10,
                 yaxis=:log10,
@@ -807,8 +810,9 @@ function plot_by_setup(
                 label="* ← "*string(ks[i]))
         end
     end
-    pu
+    title, pu
 end
+
 using PyPlot
 using PyCall
 using Plots
@@ -875,21 +879,23 @@ function plot_by_setup_h(
     title, pu
 end
 pu = plot_by_setup_h(1000, 1, [1:5;], 'a', 'a', "ns", 1000)
-pus = Dict{String, typeof(pu)}()
+pus2 = Dict{String, typeof(pu)}()
 for ρ in 1:3
     for cf in ['a', 'b']
         for cq in ['a', 'b']
             for sing in [0, 330, 660, 1000]
-                title, pu = plot_by_setup_h(1000, ρ, [1:5;], cf, cq, "ns", sing)
-                pus[title] = pu
+                #title, pu = plot_by_setup_h(1000, ρ, [1:5;], cf, cq, "ns", sing)
+                title, pu = plot_by_setup(1000, ρ, [1:5;], cf, cq, "ns", sing, tables)
+                pus2[title] = pu
             end
         end
     end
 end
-pus
+pus2
 pusnames = sort([keys(pus)...])
+display(pus2[pusnames[4]])
 for n in pusnames
-    png(pus[n], "CM19/report/result/netgen/"*"hiter_fixlim_"*n)
+    png(pus2[n], "CM19/report/result/netgen/"*"itepst_fixlim_"*n)
 end
 png(pu, "prova.png")
 display(pu)
