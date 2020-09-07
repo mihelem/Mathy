@@ -502,6 +502,14 @@ end
 #=
     START NEEDED ITERATIONS MEASURE
 =#
+include("testsetrun.jl")
+include("dmacio.jl")
+include("grb.jl")
+using LaTeXStrings
+using Printf
+using Plots
+using JLD
+using HDF5
 using Distributed
 addprocs(24)
 
@@ -666,10 +674,10 @@ function make_tables(
         @async tables[pname] = fetch(fs[pname])
     end
 end
-#ϵs = [0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001]
-ϵs = [0.1]
-hiters = [1:2;]
-#hiters = [1:20;]
+ϵs = [0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001]
+#ϵs = [0.1]
+#hiters = [1:2;]
+hiters = [1:20;]
 make_tables(
     problems,
     tables,
@@ -683,8 +691,212 @@ make_tables(
     true)
 
 tables
+tables_tot = Dict{String, Array{Int64,2}}()
+for (name, arr) in tables
+    tables[name] = arr .* [1:20;]
+end
+tables_tot = deepcopy(tables)
+for (name, arr) in tables_tot
+    if size(arr)[2] > 0
+        arr[arr .< 0] .= maximum(arr)+1
+    end
+end
+tables_tot
+for (name, arr) in tables_tot
+    if size(arr, 2) > 0
+        arr[arr .== maximum(arr)] .= 100001
+    end
+end
+snames = sort([keys(tables_tot)...])
+tables_tot_minite = Dict{String, Array{Int64, 1}}()
+tables_tot_minhit = Dict{String, Array{Int64, 1}}()
+unsolvables = [name for (name, arr) in tables_tot if size(arr)[2]==0]
+sort!(unsolvables)
+for (name, arr) in tables_tot
+    if size(arr)[2]>0
+        tables_tot_minite[name] = [minimum(c) for c in eachcol(arr)]
+        tables_tot_minite[name][tables_tot_minite[name] .== 100001] .= 200000
+        tables_tot_minhit[name] =
+                [(minimum(c) == 100001 ? 40 : argmin(c)) for c in eachcol(arr)]
+    end
+end
+tables_tot_minite
+function plot_by_instance(pname)
+    ss = ["0000", "0330", "0660", "1000"]
+    styls = [:solid, :dash, :dashdot, :dot]
+    mshapes = [:circle, :dtriangle, :utriangle, :x]
+    colors = [:grey, :white, :white, :black]
+    malphas = [0.7, 0.5, 0.5, 1.0]
+    pu = plot()
+    # Plot by instance comparing singular percentage
+    for i in eachindex(ss)
+        let arr = tables_tot_minite[pname*"-"*ss[i]]
+            plot!(pu,
+                title=pname,
+                10.0 .^(.- [1, 2, 3, 4, 5, 6]),
+                seriestype=:scatter,
+                legend=:topleft,
+                xlabel=L"\epsilon_{rel}",
+                ylabel="total iterations",
+                arr,
+                xaxis=:log10,
+                yaxis=:log10,
+                ylims=(0.7*minimum(arr), min(maximum(arr), 100000)),
+                xflip=true,
+                markeralpha=malphas[i],
+                markershape=mshapes[i],
+                color=colors[i],
+                strokecolor=:black,
+                label=ss[i])
+        end
+    end
+    pu
+end
+function plot_by_setup(
+    n::Int64,       # arcs
+    ρ::Int64,       # graph density ∈ [1, 2, 3]
+    ks::Array{Int64, 1},
+    cf::Char,       # linear to fixed cost, 'a': high, 'b': low (CHECK)
+    cq::Char,       # quadratic to fixed cost, 'a': high, 'b': low (CHECK)
+    scale::String,  # scale arc capacity by 0.7 if "s", no action if "ns"
+    singular::Int64)
+
+    setups = [TestgenParams(PargenParams(n, ρ, k, cf, cq, scale), singular) for k in ks]
+    names = [string(setup) for setup in setups]
+    styls = [:solid, :dash, :dashdot, :dot]
+    mshapes = [:circle, :dtriangle, :utriangle, :x, :+, :diamond]
+    colors = [:grey, :white, :white, :black, :black, :black, :grey]
+    malphas = [0.7, 0.5, 0.5, 1.0, 1.0, 1.0, 0.7]
+    pu = plot()
+    # Plot by instance comparing singular percentage
+    title = split(string(setups[1]), "-") |>
+        tokens -> begin
+            tokens[3] = "*"
+            join(tokens, "-")
+        end
+    ylimsmin = Inf
+    ylimsmax = -Inf
+    for i in eachindex(ks)
+        curname = string(setups[i])
+        if !haskey(tables_tot_minite, curname)
+            continue
+        end
+        let arr = tables_tot_minite[curname]
+            ylimsmin = min(ylimsmin, 0.7*minimum(arr))
+            ylimsmax = begin
+                maxarr = maximum(arr)
+                max(ylimsmax, min(1.3*maxarr, 100000))
+            end
+            @show (ylimsmin, ylimsmax)
+            plot!(pu,
+                10.0 .^(.- [1, 2, 3, 4, 5, 6]),
+                arr,
+                seriestype=:scatter,
+                legend=:topleft,
+                xlabel=L"\epsilon_{rel}",
+                ylabel="total iterations",
+                title=title,
+                xaxis=:log10,
+                yaxis=:log10,
+                ylims=(ylimsmin, 100000),
+                xflip=true,
+                markeralpha=malphas[i],
+                markershape=mshapes[i],
+                color=colors[i],
+                strokecolor=:black,
+                label="* ← "*string(ks[i]))
+        end
+    end
+    pu
+end
+using PyPlot
+using PyCall
+using Plots
+Plots.backend()
+
+pyplot()
+function get_setup_name(setups::Array{TestgenParams, 1})
+    split(string(setups[1]), "-") |>
+        tokens -> begin
+            tokens[4] = "*"
+            join(tokens, "-")
+        end
+end
+function plot_by_setup_h(
+    n::Int64,       # arcs
+    ρ::Int64,       # graph density ∈ [1, 2, 3]
+    ks::Array{Int64, 1},
+    cf::Char,       # linear to fixed cost, 'a': high, 'b': low (CHECK)
+    cq::Char,       # quadratic to fixed cost, 'a': high, 'b': low (CHECK)
+    scale::String,  # scale arc capacity by 0.7 if "s", no action if "ns"
+    singular::Int64)
+
+    setups = [TestgenParams(PargenParams(n, ρ, k, cf, cq, scale), singular) for k in ks]
+    names = [string(setup) for setup in setups]
+    styls = [:solid, :dash, :dashdot, :dot]
+    mshapes = [:circle, :dtriangle, :utriangle, :x, :+, :diamond]
+    colors = [:grey, :white, :white, :black, :black, :black, :grey]
+    malphas = [0.7, 0.5, 0.5, 1.0, 1.0, 1.0, 0.7]
+    pu = plot()
+    # Plot by instance comparing singular percentage
+    title = get_setup_name(setups)
+    ylimsmin = Inf
+    ylimsmax = -Inf
+    for i in eachindex(ks)
+        curname = string(setups[i])
+        if !haskey(tables_tot_minhit, curname)
+            continue
+        end
+        let arr = tables_tot_minhit[curname]
+            #ylimsmin = min(ylimsmin, 0.7*minimum(arr))
+            #ylimsmax = ylimsmax = maximum([arr[arr .≤ 20] .+ 1; ylimsmax])
+            #ylimsmin = min(ylimsmin, minimum([arr[arr .> 1]; 2])-0.5)
+            #@show (ylimsmin, ylimsmax)
+            plot!(pu,
+                10.0 .^(.- [1, 2, 3, 4, 5, 6]),
+                arr,
+                seriestype=:scatter,
+                legend=:topleft,
+                xlabel=L"\epsilon_{rel}",
+                ylabel="stages",
+                title=title,
+                xaxis=:log2,
+                #yaxis=:log10,
+                #ylims=(ylimsmin, ylimsmax),
+                ylims=(1.5, 20.5),
+                xflip=true,
+                markeralpha=malphas[i],
+                markershape=mshapes[i],
+                color=colors[i],
+                strokecolor=:black,
+                label="* ← "*string(ks[i]))
+        end
+    end
+    title, pu
+end
+pu = plot_by_setup_h(1000, 1, [1:5;], 'a', 'a', "ns", 1000)
+pus = Dict{String, typeof(pu)}()
+for ρ in 1:3
+    for cf in ['a', 'b']
+        for cq in ['a', 'b']
+            for sing in [0, 330, 660, 1000]
+                title, pu = plot_by_setup_h(1000, ρ, [1:5;], cf, cq, "ns", sing)
+                pus[title] = pu
+            end
+        end
+    end
+end
+pus
+pusnames = sort([keys(pus)...])
+for n in pusnames
+    png(pus[n], "CM19/report/result/netgen/"*"hiter_fixlim_"*n)
+end
+png(pu, "prova.png")
+display(pu)
+pu
 using JLD
-save("tables.jld", "tables", tables)
+save("tables0907.jld", "tables", tables)
+tables = load("tables0907.jld", "tables")
 pname = "netgen-1000-1-4-a-a-ns-0330"
 tables["netgen-1000-1-4-a-a-ns-0330"] =
     table_of_needed_iterations(
