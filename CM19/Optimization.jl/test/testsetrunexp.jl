@@ -499,6 +499,70 @@ function run_experiment(problem, max_iter, type, result, todos=Set{String}(["dua
         )
 end
 
+
+#=
+    TEST PRIVATO PER COMPARARLO COL C++
+=#
+problem = problems["netgen-50000-1-1-a-a-ns-00000"]
+model = solveQMCFBP(problem)
+L = begin
+    if termination_status(model) == MOI.OPTIMAL
+        objective_value(model)
+    else
+        Inf
+    end
+end
+
+function RNMsolver(problem::QMCFBProblem, n_iters, n_stages, α, β, α_div)
+    @unpack Q, q, E, b, l, u = problem
+    m, n = size(E)
+    Q╲ = view(Q, [CartesianIndex(i, i) for i in 1:n])
+    invQ╲ = 1. ./ Q╲
+    sing = Q╲ .== 0
+    nsing = .~sing
+
+    v = zeros(Float64, m)
+    g = zeros(Float64, m)
+    μ = zeros(Float64, m)
+    L_best = -Inf
+    μ_best = zeros(Float64, m)
+    function mid(a, b, c)
+        m, M = min(a, b), max(a, b)
+        min(max(c, m), M)
+    end
+    function get_x(μ)
+        x = zeros(Float64, n)
+        x[nsing] = mid.(invQ╲[nsing] .* (-q-E'μ)[nsing], l[nsing], u[nsing])
+        x[sing] = (-q-E'μ)[sing]
+        mi, ma = x[sing].<0, x[sing].≥0
+        x[sing][mi] = l[sing][mi]
+        x[sing][ma] = u[sing][ma]
+        x
+    end
+    function get_∂L(x)
+        E*x-b
+    end
+    function get_L(μ, x, ∂L)
+        x⋅(0.5*Q╲ .* x + q) + μ⋅∂L
+    end
+
+    for stage in 1:n_stages
+        for iter in 1:n_iters
+            g[:] .= get_∂L(get_x(μ+β*v))
+            v[:] .= β*v + α*g
+            μ[:] .= μ + v
+            L = get_x(μ) |> x -> get_L(μ, x, get_∂L(x))
+            if L > L_best
+                L_best = L
+                μ_best[:] .= μ
+            end
+        end
+        μ[:] .= μ_best
+        α /= α_div
+    end
+    return L_best, μ_best
+end
+L′, μ = RNMsolver(problem, 8000, 20, 1.0, 0.99975, 2.0)
 #=
     START NEEDED ITERATIONS MEASURE
 =#
@@ -518,7 +582,7 @@ addprocs(24)
 @everywhere include("/home/mihele/Source/julia/git/CM19/Optimization.jl/test/dmacio.jl")
 @everywhere include("/home/mihele/Source/julia/git/CM19/Optimization.jl/test/grb.jl")
 
-problems = parse_dir(NetgenDIMACS, "CM19/Optimization.jl/test/gen/set/")
+problems = parse_dir(NetgenDIMACS, "CM19/Optimization.jl/src/cpp/bin/")
 
 @everywhere function exp_search(f, rng::Tuple{Int64, Int64})
 

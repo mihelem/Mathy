@@ -17,12 +17,12 @@ function doit(K)
     end
 end
 
-n, ρ, k, cf, cq, scale = 50000, 1, 1, "a", "a", "ns"
-run(`./Optimization.jl/test/gen/pargen $n $ρ $k $cf $cq $scale`)
+n, ρ, k, cf, cq, scale = 15, 1, 1, "a", "a", "ns"
+run(`./CM19/Optimization.jl/test/gen/pargen $n $ρ $k $cf $cq $scale`)
 
 doit(1)
 # generate with netgen the network file
-path = "./Optimization.jl/test/gen/set2/"
+path = "./CM19/Optimization.jl/src/cpp/bin/"
 for filename in readdir(path)
     if endswith(filename, ".par") == false
         continue
@@ -33,7 +33,7 @@ for filename in readdir(path)
         read(
             pipeline(
                 path*filename,
-                `./Optimization.jl/test/gen/netgen`),
+                `./CM19/Optimization.jl/test/gen/netgen`),
             String))
 end
 # Generate with qfcgen the quadratic files
@@ -42,7 +42,7 @@ for filename in readdir(path)
         continue
     end
     qfc_file = filename[1:end-3]*"qfc"
-    run(`./Optimization.jl/test/gen/qfcgen $path$filename`)
+    run(`./CM19/Optimization.jl/test/gen/qfcgen $path$filename`)
 end
 
 function add_singular(problems::Dict{String, QMCFBProblem},
