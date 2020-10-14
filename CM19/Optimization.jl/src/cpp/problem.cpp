@@ -8,6 +8,7 @@
 #include <optional>
 #include <limits>
 #include <iomanip>
+#include <cmath>
 
 bool starts_with(std::string const &s, char c) {
   return s.size() > 0 && s[0] == c;
@@ -20,7 +21,7 @@ Value norm(uint16_t l, std::vector<Value> const & v) {
     Value t{1};
     for (auto i{0}; i<l; ++i)
       t *= u;
-    result += t;
+    result += abs(t);
   }
   return result;
 }
@@ -178,15 +179,13 @@ struct ProblemVecs<Value, Index, std::vector>
     }
     for (typename type::index i{0}, j{0}; i<this->n; ++i) {
       if (arcs[i]) {
+        this->q[j] = this->q[i];
         this->q_fixed[j] = this->q_fixed[i];
         ++j;
       }
     }
     this->sing_begin = nonsingular;
     singular = edge_cnt-nonsingular;
-    this->Q.resize(edge_cnt);
-    this->invQ.resize(edge_cnt);
-    this->q_fixed.resize(edge_cnt);
     this->sing_n = std::vector<typename type::index>(singular);
     this->nsing_n = std::vector<typename type::index>(nonsingular);
     std::iota(this->sing_n.begin(), this->sing_n.end(), this->sing_begin);
@@ -205,6 +204,9 @@ struct ProblemVecs<Value, Index, std::vector>
     this->e.resize(2*this->n);
     this->l.resize(this->n);
     this->u.resize(this->n);
+    this->Q.resize(this->n);
+    this->invQ.resize(this->n);
+    this->q_fixed.resize(this->n);
     this->q.resize(this->n);
     this->all_n.resize(this->n);
   }
@@ -286,14 +288,14 @@ struct ProblemVecs<Value, Index, std::vector>
       this->all_m.begin(),
       this->all_m.end(),
       [&](typename type::index i) {
-        Lvec[this->n+i] = mu[i]*dL[i];
+        Lvec[this->n + i] = mu[i]*dL[i];
       }
     );
-    return
-      std::reduce(
+
+    return std::reduce(
         std::execution::par_unseq,
-        Lvec.cbegin(),
-        Lvec.cend()
+        begin(Lvec),
+        end(Lvec)
       );
   }
 };
@@ -363,9 +365,9 @@ struct SubgradientIterationData<Value, Index, Container, NesterovMomentumIterati
 
 /*
     α, β, v = M.α, M.β, M.v
-    g = ∂f(x + β*v)
+    g = ∂f(μ + β*v)
     v[:] = β*v - α*g
-    (x+v, α, g, β, v)
+    (μ+v, α, g, β, v)
 */
 
 template <
@@ -418,7 +420,7 @@ struct NesterovMomentumIteration<Value, Index, std::vector, ProblemVecs>
     this->data.x_best = x_best ? std::move(*x_best) : typename type::template container<typename type::value>(problem.n, 0);
     this->data.g_best = g_best ? std::move(*g_best) : typename type::template container<typename type::value>(problem.m, 0);
     this->data.Lvec = Lvec ? std::move(*Lvec) : typename type::template container<typename type::value>(problem.m+problem.n, 0);
-    this->data.L_best = L_best ? *L_best : std::numeric_limits<typename type::value>::min();
+    this->data.L_best = L_best ? *L_best : std::numeric_limits<typename type::value>::lowest()/2;
     this->data.i_best = i_best ? *i_best : 0;
   }
 
@@ -449,26 +451,15 @@ struct NesterovMomentumIteration<Value, Index, std::vector, ProblemVecs>
         }
       );
 
-      problem.get_x(this->data.mu, this->data.x2);
-      problem.get_dL(this->data.x2, this->data.g);
-      auto L{problem.get_L(this->data.x2, this->data.mu, this->data.g, this->data.Lvec)};
+      problem.get_x(this->data.mu, this->data.x);
+      problem.get_dL(this->data.x, this->data.g);
+      auto L{problem.get_L(this->data.x, this->data.mu, this->data.g, this->data.Lvec)};
       if (L > this->data.L_best) {
         this->data.L_best = L;
         std::copy(this->data.mu.begin(), this->data.mu.end(), this->data.mu_best.begin());
         // it's not worth the cost to copy also all the best x, g, etc...
       }
     }
-
-/*
-    print("μ_best", this->data.mu_best);
-    problem.get_x(this->data.mu_best, this->data.x_best);
-    print("x_best", this->data.x_best);
-    problem.get_dL(this->data.x_best, this->data.g_best);
-    print("g_best", this->data.g_best);
-    typename type::value myL = problem.get_L(this->data.x_best, this->data.mu_best, this->data.g_best, this->data.Lvec);
-    print("Lvec", this->data.Lvec);
-    std::cout << "L : " << myL << std::endl;
-    std::cout << "----------------------" << std::endl; */
   }
 };
 

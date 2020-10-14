@@ -503,7 +503,9 @@ end
 #=
     TEST PRIVATO PER COMPARARLO COL C++
 =#
-problem = problems["netgen-50000-1-1-a-a-ns-00000"]
+problems = parse_dir(NetgenDIMACS, "CM19/Optimization.jl/src/cpp/bin/scaling/")
+filename = "netgen-50000-1-1-a-a-ns-33000"
+problem = problems["netgen-50000-1-1-a-a-ns-33000"]
 model = solveQMCFBP(problem)
 L = begin
     if termination_status(model) == MOI.OPTIMAL
@@ -512,6 +514,160 @@ L = begin
         Inf
     end
 end
+propath = "CM19/Optimization.jl/src/cpp/bin/scaling/"
+function best_stater(path, file, tot_iter, sta_s, sta_b, sta_e, α, β)
+    Ls = []
+    tims = []
+    #stas = [sta_b:sta_e;]
+    stas = []
+    sta_e = min(sta_e, tot_iter)
+    sta = min(sta_s, sta_e)
+    L_best = -Inf
+    sta_best = sta
+    visited = zeros(Bool, sta_e-sta_b+1)
+    function visit(sta)
+        if visited[sta-sta_b+1] || sta < sta_b || sta > sta_e
+            false
+        else
+            visited[sta-sta_b+1] = true
+            true
+        end
+    end
+    while sta_b≤sta≤sta_e
+        iter = tot_iter ÷ sta
+        @show (sta, iter)
+        out = read(
+                pipeline(
+                    `CM19/Optimization.jl/src/cpp/bin/test $path$file $sta $iter $α $β`),
+                    #stdout="CM19/Optimization.jl/src/cpp/bin/tmp.tmp"),
+                String)
+        print("\n------------\n", out, "\n-----------\n")
+        lines = split(out, '\n')
+        line = lines[lines .!= ""][end]
+        L, tim = split(line, ' ') |> tok -> (parse(Float64, tok[1]), parse(Float64, tok[end]))
+        push!(Ls, L)
+        push!(tims, tim)
+        push!(stas, sta)
+
+        if sta == sta_best
+            if visit(sta+1)
+                sta += 1
+            else if visit(sta-1)
+                sta -= 1
+            else
+                break
+            end
+        else if L > L_best
+            step = sta ≥ sta_best ? 1 : -1
+            if visit(sta+step)
+                sta += step
+            else
+                break
+            end
+
+            L_best = L
+            sta_best = sta
+        else if L < L_best
+            step = sta_best > sta ? 1 : -1
+            if visit(sta_best+step)
+                sta = sta_best+step
+            else
+                break
+            end
+        else
+            step = sta_best > sta ? 1 : -1
+            if visit(sta+step)
+                sta += step
+            else if visit(sta-step)
+                sta -= step
+            else
+                break
+            end
+        end
+    end
+
+    for sta in stas
+        iter = tot_iter ÷ sta
+        @show (sta, iter)
+        out = read(
+                pipeline(
+                    `CM19/Optimization.jl/src/cpp/bin/test $path$file $sta $iter $α $β`),
+                    #stdout="CM19/Optimization.jl/src/cpp/bin/tmp.tmp"),
+                String)
+        print("------------\n", out, "\n-----------")
+        lines = split(out, '\n')
+        line = lines[lines .!= ""][end]
+        L, tim = split(line, ' ') |> tok -> (parse(Float64, tok[1]), parse(Float64, tok[end]))
+
+        push!(Ls, L)
+        push!(tims, tim)
+        if length(Ls)>1 && L[end] < Ls[end-1]
+            break
+        end
+    end
+    argmax(Ls) |> i -> (Ls, Ls[i], stas[i], tot_iter÷stas[i], tims[i])
+end
+Ls, L′, stage, iter, tim = best_stater(propath, "netgen-1024-2-1-a-a-ns-0000", 100, 1, 4, 1.0, 0.975)
+Ls
+L′
+stage
+iter
+
+results = Tuple{String, Float64, Int64, Int64, Float64, Float64}[]
+results
+save("scaling20201014.jld", "results", results)
+
+function exp_search(f, rng::Tuple{Int64, Int64})
+
+    b, e = rng
+    step = 1
+    x = b
+    u = e+1
+    while (x ≤ e) && !f(x)
+        print("*")
+        x = b+step
+        step *= 2
+    end
+    step = step ÷ 2
+    bin_search(f, (x-step, min(e, x)))
+end
+
+function bin_search(f, rng::Tuple{Int64, Int64})
+    b, e = rng
+    while e≥b
+        print("°")
+        m = (b+e)÷2
+        if !f(m)
+            b = m+1
+        else
+            e = m-1
+        end
+    end
+    e+1
+end
+function scaling(path, problems, ϵ_rel, res, α, β, max_iters)
+    for (name, problem) in problems
+        model = solveQMCFBP(problem)
+        L = begin
+            if termination_status(model) == MOI.OPTIMAL
+                objective_value(model)
+            else
+                Inf
+            end
+        end
+        if L < Inf
+            function check_ϵ(tot_iter)
+                Ls, L′, stage, iter, tim = best_stater(path, name, tot_iter, 1, 20, α, β)
+                ϵ_rel′ = (L-L′)/abs(L)
+                push!(res, (name, ϵ_rel, tot_iter, stage, ϵ_rel′, tim))
+                ϵ_rel′ ≤ ϵ_rel
+            end
+            exp_search(check_ϵ, (1, max_iters))
+        end
+    end
+end
+
+scaling(propath, problems, 1e-2, results, 1.0, 0.975, 800000)
 
 function RNMsolver(problem::QMCFBProblem, n_iters, n_stages, α, β, α_div)
     @unpack Q, q, E, b, l, u = problem

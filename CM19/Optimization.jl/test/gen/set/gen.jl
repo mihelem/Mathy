@@ -20,9 +20,17 @@ end
 n, ρ, k, cf, cq, scale = 15, 1, 1, "a", "a", "ns"
 run(`./CM19/Optimization.jl/test/gen/pargen $n $ρ $k $cf $cq $scale`)
 
+# TEMPORARY CODE TO GENERATE SCALING-TESTING TESTSET
+for n in [2^i for i in 10:20]
+    for ρ in 1:3
+        run(`./CM19/Optimization.jl/test/gen/pargen $n $ρ $k $cf $cq $scale`)
+    end
+end
+
+
 doit(1)
 # generate with netgen the network file
-path = "./CM19/Optimization.jl/src/cpp/bin/"
+path = "./CM19/Optimization.jl/src/cpp/bin/scaling/"
 for filename in readdir(path)
     if endswith(filename, ".par") == false
         continue
@@ -65,21 +73,21 @@ end
 
 sproblems = add_singular(problems, [0.0, 0.33, 0.66, 1.0])
 for (name, problem) in sproblems
-    fullname = "Optimization.jl/test/gen/set2/"*name
+    fullname = path*name
     write(NetgenDIMACS, fullname, problem)
 end
 
 
 include("../../dmacio.jl")
-problems = parse_dir(NetgenDIMACS, "Optimization.jl/test/gen/set2/")
+problems = parse_dir(NetgenDIMACS, path)
 
 problem = parse(NetgenDIMACS, "Optimization.jl/test/gen/set/netgen-1000-1-1-b-b-ns")
 parames = parse(PargenParams, "netgen-1000-1-1-a-a-ns.dmx")
 parames = parse(TestgenParams, "netgen-1000-1-1-a-a-ns-666.dmx")
 
 mypath = "Optimization.jl/test/gen/set/"
-for filename in readdir(mypath)
+for filename in readdir(path)
     if length(split(filename, '-')) == 7
-        rm(mypath*filename)
+        rm(path*filename)
     end
 end

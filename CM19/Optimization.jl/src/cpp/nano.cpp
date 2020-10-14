@@ -1,6 +1,20 @@
 #include "problem.cpp"
 #include <chrono>
 
+size_t find_last(std::string s, char c) {
+  size_t pos = s.size();
+  for (size_t i{0}; i<s.size(); ++i) {
+    if (s[i] == c) {
+      pos = i;
+    }
+  }
+  return pos;
+}
+
+std::string find_last_token(std::string s, char c) {
+  return s.substr(find_last(s, c)+1, s.size());
+}
+
 int main(int argc, char *argv[]) {
 
   if (argc > 5) {
@@ -11,7 +25,8 @@ int main(int argc, char *argv[]) {
     double beta {std::stod(argv[5])};
 
     std::string filename(argv[1]);
-    ProblemVecs<double, int, std::vector> problem("./", filename, 0);
+    auto singular{std::stoi(find_last_token(filename, '-'))};
+    ProblemVecs<double, int, std::vector> problem("./", filename, singular);
     std::cout << problem.m << ' ' << problem.n << std::endl;
 
 
