@@ -515,15 +515,15 @@ L = begin
     end
 end
 propath = "CM19/Optimization.jl/src/cpp/bin/scaling/"
-function best_stater(path, file, tot_iter, sta_s, sta_b, sta_e, α, β)
-    Ls = []
-    tims = []
-    #stas = [sta_b:sta_e;]
-    stas = []
+problems_little = Dict([(name, problem) for (name, problem) in problems if parse(Int64, split(name, "-")[2]) < 30000])
+problems_big = Dict([(name, problem) for (name, problem) in problems if parse(Int64, split(name, "-")[2]) ≥ 30000])
+function best_stater(path, file, tot_iter, sta, sta_b, sta_e, α, β)
+    Ls, tims, stas = Float64[], Float64[], Int64[]
     sta_e = min(sta_e, tot_iter)
-    sta = min(sta_s, sta_e)
+    sta = min(sta, sta_e)
     L_best = -Inf
     sta_best = sta
+    tim_best = 0.0
     visited = zeros(Bool, sta_e-sta_b+1)
     function visit(sta)
         if visited[sta-sta_b+1] || sta < sta_b || sta > sta_e
@@ -552,12 +552,12 @@ function best_stater(path, file, tot_iter, sta_s, sta_b, sta_e, α, β)
         if sta == sta_best
             if visit(sta+1)
                 sta += 1
-            else if visit(sta-1)
+            elseif visit(sta-1)
                 sta -= 1
             else
                 break
             end
-        else if L > L_best
+        elseif L > L_best
             step = sta ≥ sta_best ? 1 : -1
             if visit(sta+step)
                 sta += step
@@ -567,7 +567,8 @@ function best_stater(path, file, tot_iter, sta_s, sta_b, sta_e, α, β)
 
             L_best = L
             sta_best = sta
-        else if L < L_best
+            tim_best = tim
+        elseif L < L_best
             step = sta_best > sta ? 1 : -1
             if visit(sta_best+step)
                 sta = sta_best+step
@@ -578,7 +579,7 @@ function best_stater(path, file, tot_iter, sta_s, sta_b, sta_e, α, β)
             step = sta_best > sta ? 1 : -1
             if visit(sta+step)
                 sta += step
-            else if visit(sta-step)
+            elseif visit(sta-step)
                 sta -= step
             else
                 break
@@ -586,26 +587,7 @@ function best_stater(path, file, tot_iter, sta_s, sta_b, sta_e, α, β)
         end
     end
 
-    for sta in stas
-        iter = tot_iter ÷ sta
-        @show (sta, iter)
-        out = read(
-                pipeline(
-                    `CM19/Optimization.jl/src/cpp/bin/test $path$file $sta $iter $α $β`),
-                    #stdout="CM19/Optimization.jl/src/cpp/bin/tmp.tmp"),
-                String)
-        print("------------\n", out, "\n-----------")
-        lines = split(out, '\n')
-        line = lines[lines .!= ""][end]
-        L, tim = split(line, ' ') |> tok -> (parse(Float64, tok[1]), parse(Float64, tok[end]))
-
-        push!(Ls, L)
-        push!(tims, tim)
-        if length(Ls)>1 && L[end] < Ls[end-1]
-            break
-        end
-    end
-    argmax(Ls) |> i -> (Ls, Ls[i], stas[i], tot_iter÷stas[i], tims[i])
+    (Ls, L_best, sta_best, tot_iter÷sta_best, tim_best)
 end
 Ls, L′, stage, iter, tim = best_stater(propath, "netgen-1024-2-1-a-a-ns-0000", 100, 1, 4, 1.0, 0.975)
 Ls
@@ -646,6 +628,7 @@ function bin_search(f, rng::Tuple{Int64, Int64})
     e+1
 end
 function scaling(path, problems, ϵ_rel, res, α, β, max_iters)
+    stage = [1]
     for (name, problem) in problems
         model = solveQMCFBP(problem)
         L = begin
@@ -657,7 +640,8 @@ function scaling(path, problems, ϵ_rel, res, α, β, max_iters)
         end
         if L < Inf
             function check_ϵ(tot_iter)
-                Ls, L′, stage, iter, tim = best_stater(path, name, tot_iter, 1, 20, α, β)
+                Ls, L′, stage′, iter, tim = best_stater(path, name, tot_iter, stage[1], 1, 30, α, β)
+                stage[1] = stage′
                 ϵ_rel′ = (L-L′)/abs(L)
                 push!(res, (name, ϵ_rel, tot_iter, stage, ϵ_rel′, tim))
                 ϵ_rel′ ≤ ϵ_rel
