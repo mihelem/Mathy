@@ -526,7 +526,7 @@ function best_stater(path, file, tot_iter, sta, sta_b, sta_e, α, β)
     tim_best = 0.0
     visited = zeros(Bool, sta_e-sta_b+1)
     function visit(sta)
-        if visited[sta-sta_b+1] || sta < sta_b || sta > sta_e
+        if sta < sta_b || sta > sta_e || visited[sta-sta_b+1]
             false
         else
             visited[sta-sta_b+1] = true
@@ -541,7 +541,7 @@ function best_stater(path, file, tot_iter, sta, sta_b, sta_e, α, β)
                     `CM19/Optimization.jl/src/cpp/bin/test $path$file $sta $iter $α $β`),
                     #stdout="CM19/Optimization.jl/src/cpp/bin/tmp.tmp"),
                 String)
-        print("\n------------\n", out, "\n-----------\n")
+        print(out)
         lines = split(out, '\n')
         line = lines[lines .!= ""][end]
         L, tim = split(line, ' ') |> tok -> (parse(Float64, tok[1]), parse(Float64, tok[end]))
@@ -550,39 +550,49 @@ function best_stater(path, file, tot_iter, sta, sta_b, sta_e, α, β)
         push!(stas, sta)
 
         if sta == sta_best
-            if visit(sta+1)
-                sta += 1
-            elseif visit(sta-1)
-                sta -= 1
-            else
-                break
-            end
-        elseif L > L_best
-            step = sta ≥ sta_best ? 1 : -1
-            if visit(sta+step)
-                sta += step
-            else
-                break
-            end
+            @show sta == sta_best
+            if @show L > L_best(1+sign(L_best)*1e-9)
 
-            L_best = L
+                L_best = L
+                tim_best = tim
+            end
+            if visit(sta+1)
+                @show sta += 1
+            elseif visit(sta-1)
+                @show sta -= 1
+            else
+                @show break
+            end
+        elseif @show L > L_best*(1+sign(L_best)*1e-9)
+            step = sta ≥ sta_best ? 1 : -1
+            @show L_best = L
             sta_best = sta
             tim_best = tim
-        elseif L < L_best
-            step = sta_best > sta ? 1 : -1
-            if visit(sta_best+step)
+
+            if @show visit(sta+step)
+                sta += step
+            else
+                @show break
+            end
+        elseif @show L < L_best*(1-sign(L_best)*1e-10)
+            @show step = sta_best > sta ? 1 : -1
+            if @show visit(sta_best+step)
                 sta = sta_best+step
             else
-                break
+                @show break
             end
         else
-            step = sta_best > sta ? 1 : -1
+            @show step = sta_best > sta ? 1 : -1
             if visit(sta+step)
-                sta += step
+                @show sta += step
             elseif visit(sta-step)
-                sta -= step
+                @show sta -= step
+            elseif visit(sta_best+1)
+                @show sta = sta_best+1
+            elseif visit(sta_best-1)
+                @show sta = sta_best-1
             else
-                break
+                @show break
             end
         end
     end
@@ -641,9 +651,10 @@ function scaling(path, problems, ϵ_rel, res, α, β, max_iters)
         if L < Inf
             function check_ϵ(tot_iter)
                 Ls, L′, stage′, iter, tim = best_stater(path, name, tot_iter, stage[1], 1, 30, α, β)
+                println("--------------")
                 stage[1] = stage′
                 ϵ_rel′ = (L-L′)/abs(L)
-                push!(res, (name, ϵ_rel, tot_iter, stage, ϵ_rel′, tim))
+                push!(res, (name, ϵ_rel, tot_iter, stage′, ϵ_rel′, tim))
                 ϵ_rel′ ≤ ϵ_rel
             end
             exp_search(check_ϵ, (1, max_iters))
@@ -651,7 +662,8 @@ function scaling(path, problems, ϵ_rel, res, α, β, max_iters)
     end
 end
 
-scaling(propath, problems, 1e-2, results, 1.0, 0.975, 800000)
+results_little = Tuple{String, Float64, Int64, Int64, Float64, Float64}[]
+scaling(propath, problems_little, 1e-1, results_little, 1.0, 0.975, 800000)
 
 function RNMsolver(problem::QMCFBProblem, n_iters, n_stages, α, β, α_div)
     @unpack Q, q, E, b, l, u = problem
