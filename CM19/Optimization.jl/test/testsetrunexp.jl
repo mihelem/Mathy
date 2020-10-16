@@ -533,6 +533,7 @@ function best_stater(path, file, tot_iter, sta, sta_b, sta_e, α, β)
             true
         end
     end
+    visit(sta)
     while sta_b≤sta≤sta_e
         iter = tot_iter ÷ sta
         @show (sta, iter)
@@ -551,7 +552,7 @@ function best_stater(path, file, tot_iter, sta, sta_b, sta_e, α, β)
 
         if sta == sta_best
             @show sta == sta_best
-            if @show L > L_best(1+sign(L_best)*1e-9)
+            if @show L > L_best*(1+sign(L_best)*1e-9)
 
                 L_best = L
                 tim_best = tim
@@ -595,15 +596,11 @@ function best_stater(path, file, tot_iter, sta, sta_b, sta_e, α, β)
                 @show break
             end
         end
+        @show visited
     end
 
     (Ls, L_best, sta_best, tot_iter÷sta_best, tim_best)
 end
-Ls, L′, stage, iter, tim = best_stater(propath, "netgen-1024-2-1-a-a-ns-0000", 100, 1, 4, 1.0, 0.975)
-Ls
-L′
-stage
-iter
 
 results = Tuple{String, Float64, Int64, Int64, Float64, Float64}[]
 results
@@ -637,6 +634,19 @@ function bin_search(f, rng::Tuple{Int64, Int64})
     end
     e+1
 end
+
+function gurobi_times(problems)
+    times = Tuple{String, Float64}[]
+    for (name, problem) in problems
+        t = @elapsed model = solveQMCFBP(problem)
+        if termination_status(model) == MOI.OPTIMAL
+            push!(times, (name, t))
+        end
+    end
+    times
+end
+gutime = gurobi_times(problems)
+
 function scaling(path, problems, ϵ_rel, res, α, β, max_iters)
     stage = [1]
     for (name, problem) in problems
@@ -650,7 +660,7 @@ function scaling(path, problems, ϵ_rel, res, α, β, max_iters)
         end
         if L < Inf
             function check_ϵ(tot_iter)
-                Ls, L′, stage′, iter, tim = best_stater(path, name, tot_iter, stage[1], 1, 30, α, β)
+                Ls, L′, stage′, iter, tim = best_stater(path, name, tot_iter, stage[1], 1, 25, α, β)
                 println("--------------")
                 stage[1] = stage′
                 ϵ_rel′ = (L-L′)/abs(L)
@@ -663,8 +673,148 @@ function scaling(path, problems, ϵ_rel, res, α, β, max_iters)
 end
 
 results_little = Tuple{String, Float64, Int64, Int64, Float64, Float64}[]
-scaling(propath, problems_little, 1e-1, results_little, 1.0, 0.975, 800000)
+results_big = deepcopy(results_little)
+results_big = Tuple{String, Float64, Int64, Int64, Float64, Float64}[]
+problems_nsing = [(name, problem) for (name, problem) in problems if parse(Int64, split(name, '-')[end])==0]
+results_nsing = typeof(results_little)()
+scaling(propath, problems_nsing, 1e-8, results_nsing, 1.0, 0.9975, 1200000)
 
+results_little
+function good_ones(res)
+    res[[i for i in 1:length(res) if res[i][2] ≥ res[i][5]]]
+end
+gresults_nsing = good_ones(results_nsing)
+sort!(gresults_nsing)
+gresults_little = good_ones(results_little)
+sort!(gresults_little)
+names_little = Set([ist[1] for ist in gresults_little])
+names_nsing = Set([ist[1] for ist in gresults_nsing])
+
+bgresults_little = [(vs -> vs[argmin((v->v[3]).(vs))])([ist for ist in gresults_little if ist[1] == name]) for name in names_little]
+bgresults_nsing = [(vs -> vs[argmin((v->v[3]).(vs))])([ist for ist in gresults_nsing if ist[1] == name]) for name in names_nsing]
+sort!(bgresults_nsing)
+save("results_nsing_1e-8.jld", "bgresults_nsing", bgresults_nsing)
+
+sort!(gutime)
+
+gresults_big = sort!(good_ones(results_big))
+save("gurobi_time.jld", "gutime", gutime)
+restu = (t -> (Int64(ceil(get_sin(t)*3/get_dim(t)))//3, (arcs=get_dim(t), ms=t[2]))).(gutime)
+
+
+names_big = Set([ist[1] for ist in gresults_big])
+bgresults_big = sort!([(vs -> vs[argmin((v->v[3]).(vs))])([ist for ist in gresults_big if ist[1] == name]) for name in names_big])
+bgresults = sort!([bgresults_little; bgresults_big])
+save("results_big_1e-1.jld", "bgresults_big", bgresults_big)
+save("result_1e-2.jld", "bgresults", bgresults)
+
+get_dim = t -> parse(Int64, split(t[1], '-')[2])
+get_sin = t -> parse(Int64, split(t[1], '-')[8])
+resti =(t -> (Int64(ceil(get_sin(t)*3/get_dim(t)))//3, (arcs=get_dim(t), ms=t[6], iters=t[3], ϵ_rel=t[5], stages=t[4]))).(bgresults_nsing)
+dresti = Dict()
+for (na, tu) in resti
+    if !haskey(dresti, na)
+        dresti[na] = [tu]
+    else
+        push!(dresti[na], tu)
+    end
+end
+dresti
+plot([t[:arcs] for t in dresti[0]], [t[:ms] for t in dresti[0]]; )
+using PyPlot
+pyplot()
+
+a = a["gutime"]
+a = [(x, y*1000) for (x, y) in a]
+a
+save(files[4], "gutime", a)
+
+files = ["results_1e-1.jld", "results_1e-2.jld", "results_nsing_1e-8.jld", "gurobi_time.jld"]
+titles = ["Time to ϵᵣₑₗ < 10⁻¹ Vs Arcs", "Time to ϵᵣₑₗ < 10⁻² Vs Arcs", "Time to ϵᵣₑₗ < 10⁻⁸ Vs Arcs", "Gurobi time Vs Arcs"]
+iss = [[0:3;], [0:3;], [0], [0:3;]]
+figs = ["results_1e-1.png", "results_1e-2.png", "results_nsing_1e-8.png", "gurobi_time.png"]
+# FITTING
+myp = plot()
+function mk_plot(myp, n, dresti, title)
+    leg = "sing = " .* ["0", "0.33", "0.66", "1"]
+    col = [:blue, :green, :grey2, :magenta]
+    x = log2.([t[:arcs] for t in dresti[n//3]])
+    y = log2.([t[:ms] for t in dresti[n//3]])
+    i = sortperm(x)
+
+    #=plot!(myp,
+        #x[i], y[i],
+        2 .^x[i], 2 .^y[i],
+        title=""
+        xaxis=:log2, yaxis=:log2,
+        seriestype=:scatter, markersize=3.5, alpha=.8,legend=false, color=col[n+1], xlabel="arcs", ylabel="time (ms)", label=nothing)
+    =#
+    A = [ones(length(x)) x]
+    l = (v -> minimum(y[findall(x .== v)])).(x)
+    u = (v -> maximum(y[findall(x .== v)])).(x)
+
+    c = A\y
+    f = c[1]*ones(length(x)) + c[2]*x
+    plot!(myp,
+        2 .^x[i], 2 .^f[i],
+        title=title,
+        ribbon = (2 .^f[i] - 2 .^l[i], 2 .^u[i] - 2 .^f[i]), fillalpha=0.2,
+        linewidth=1.5, color=col[n+1],
+        xaxis=:log2, yaxis=:log2, alpha=1.0,
+        ylims=(5.0, 75000.0),
+        xlabel="arcs", ylabel="time (ms)",
+        legend=:topleft, label=leg[n+1])
+end
+myp = plot()
+(i -> mk_plot(myp, i)).(reverse([0]))
+
+a = load("results_big_1e-2.jld")
+function mk_plot_jld(file, myp, is, title, fig)
+    datas = load(file)
+    for (dname, data) in datas
+        resti = (t -> (Int64(ceil(get_sin(t)*3/get_dim(t)))//3, (arcs=get_dim(t), ms=t[end]))).(data)
+        dresti = Dict()
+        for (na, tu) in resti
+            if !haskey(dresti, na)
+                dresti[na] = [tu]
+            else
+                push!(dresti[na], tu)
+            end
+        end
+        myp = plot()
+        (i -> mk_plot(myp, i, dresti, title)).(is)
+        Plots.savefig(myp, fig)
+    end
+end
+
+(i -> mk_plot_jld(files[i], myp, iss[i], titles[i], figs[i])).([1:4;])
+
+myp
+using Plots
+using PyCall
+Plots.savefig(myp, "time_vs_arcs_nsing10-8.png")
+using PyPlot
+1
+
+bgresults_tmp = deepcopy(bgresults)
+bgresults_tmp = [(join(split(b[1], '-')[[1:2; 4:8; 3]], '-'), b[2:end]...) for b in bgresults_tmp]
+sort!(bgresults_tmp)
+bgresults_tmp
+temt = [Tuple([x[3] for x in bgresults_tmp[3*i-2:3*i]]) for i in 1:length(bgresults_tmp)÷3]
+# END FITTING
+
+
+plot!(p, [t[:arcs] for t in dresti[3//3]], [t[:ms] for t in dresti[3//3]];
+    title="Time to reach ϵᵣₑₗ<10⁻¹",
+    seriestype=:scatter,
+    legend=:topleft,
+    xaxis=:log2,
+    yaxis=:log2,
+    xlabel="arcs",
+    ylabel="time (ms)",
+    label="sing = 1")
+using Plots
+pyplot()
 function RNMsolver(problem::QMCFBProblem, n_iters, n_stages, α, β, α_div)
     @unpack Q, q, E, b, l, u = problem
     m, n = size(E)
