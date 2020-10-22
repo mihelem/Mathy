@@ -9,6 +9,110 @@ using HDF5
 pyplot()
 problems2 = parse_dir(NetgenDIMACS, "Optimization.jl/test/gen/set2/")
 
+
+#=
+    Testing mildly singular instances
+=#
+
+problems = Dict([(name, problem) for (name, problem) in parse_dir(NetgenDIMACS, "CM19/Optimization.jl/src/cpp/bin/scaling/") if parse(Int64, split(name, '-')[end]) == 0 ])
+problems = Dict([(join(split(name, '-')[1:end-1], '-'), problem) for (name, problem) in problems])
+sproblems = add_singular(problems, [0.0; 0.5 .^ [6:10;];])
+propath = "CM19/Optimization.jl/src/cpp/bin/mildsing/"
+for (name, problem) in sproblems
+    fullname = propath*name
+    write(NetgenDIMACS, fullname, problem)
+end
+sproblems = [(name, problem) for (name, problem) in sproblems]
+gutime = gurobi_times(sproblems)
+results = Tuple{String, Float64, Int64, Int64, Float64, Float64}[]
+scaling(propath, sproblems, 1e-8, results, 1.0, 0.9975, 1200000)
+gresults = sort!(good_ones(results))
+names = Set([ist[1] for ist in gresults])
+bgresults = sort!([(vs -> vs[argmin((v->v[3]).(vs))])([ist for ist in gresults if ist[1] == name]) for name in names])
+save("results_mildsing_1e-8.jld", "bgresults", bgresults)
+gutime = [(name, 1000*t) for (name, t) in gutime]
+sort!(gutime)
+save("gurobi_mildsing.jld", "gutime", gutime)
+
+get_dim = t -> parse(Int64, split(t[1], '-')[2])
+get_sin = t -> parse(Int64, split(t[1], '-')[8])
+
+files = ["results_mildsing_1e-1.jld", "gurobi_mildsing.jld", "results_mildsing_1e-2.jld", "results_mildsing_1e-8.jld"]
+titles = ["Time to ϵᵣₑₗ < 10⁻¹ Vs Arcs", "Gurobi time Vs Arcs", "Time to ϵᵣₑₗ < 10⁻² Vs Arcs", "Time to ϵᵣₑₗ < 10⁻⁸ Vs Arcs"]
+iss = [[0:5;], [0:5;], [0:5;], [0:5;]]
+figs = ["results_mildsing_1e-1.png", "gurobi_mildsing.png", "results_mildsing_1e-2.png", "results_mildsing_1e-8.png"]
+
+function mk_plot(myp, n, dresti, title)
+    @show n
+    leg = "sing = " .* ["0", "1/1024", "1/512", "1/256", "1/128", "1/64"]
+    sings = [0, 1//1024, 1//512, 1//256, 1//128, 1//64]
+    col = [:blue, :green, :grey2, :magenta, :gold, :red]
+    @show x = log2.([t[:arcs] for t in dresti[sings[n+1]] if t[:ms]>0.0])
+    @show y = [t[:ms] for t in dresti[sings[n+1]] if t[:ms]>0.0]
+    @show y = log2.(y)
+    i = sortperm(x)
+
+    #=plot!(myp,
+        #x[i], y[i],
+        2 .^x[i], 2 .^y[i],
+        title=""
+        xaxis=:log2, yaxis=:log2,
+        seriestype=:scatter, markersize=3.5, alpha=.8,legend=false, color=col[n+1], xlabel="arcs", ylabel="time (ms)", label=nothing)
+    =#
+    A = [ones(length(x)) x]
+    l = (v -> minimum(y[findall(x .== v)])).(x)
+    u = (v -> maximum(y[findall(x .== v)])).(x)
+
+    c = A\y
+    f = c[1]*ones(length(x)) + c[2]*x
+    plot!(myp,
+        2 .^x[i], 2 .^f[i],
+        title=title,
+        ribbon = (2 .^f[i] - 2 .^l[i], 2 .^u[i] - 2 .^f[i]), fillalpha=0.2,
+        linewidth=1.5, color=col[n+1],
+        xaxis=:log2, yaxis=:log2, alpha=1.0,
+        ylims=(5.0, 75000.0),
+        xlabel="arcs", ylabel="time (ms)",
+        legend=:topleft, label=leg[n+1])
+end
+myp = plot()
+(i -> mk_plot(myp, i)).(reverse([0, 1//1024, 1//512, 1//256, 1//128, 1//64]))
+
+a = load("results_big_1e-2.jld")
+function mk_plot_jld(file, myp, is, title, fig)
+    datas = load(file)
+    for (dname, data) in datas
+        resti = (t -> (Int64(ceil(get_sin(t)*1024/get_dim(t)))//1024, (arcs=get_dim(t), ms=t[end]))).(data)
+        dresti = Dict()
+        for (na, tu) in resti
+            if !haskey(dresti, na)
+                dresti[na] = [tu]
+            else
+                push!(dresti[na], tu)
+            end
+        end
+        myp = plot()
+        (i -> mk_plot(myp, i, dresti, title)).(is)
+        Plots.savefig(myp, fig)
+    end
+end
+
+(i -> mk_plot_jld(files[i], myp, iss[i], titles[i], figs[i])).([4])
+
+data = load("results_mildsing_1e-2.jld")["bgresults"]
+data3 = Dict([(x[1], Tuple(x[2:end])) for x in data])
+results
+a = sort!(reverse.(results))
+data2 = Dict([(x[1], x[end]) for x in data])
+argmin(data2)
+data2["netgen-32768-1-1-a-a-ns-512"]
+allocco = 0
+
+#=
+    END Testing mildly singular instances
+=#
+
+
 #=
     Testing subgradient with parameter search
 =#
