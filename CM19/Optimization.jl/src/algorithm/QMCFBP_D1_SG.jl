@@ -171,7 +171,7 @@ function run!(
         L, ∂L = get_L(x, μ), get_∂L(x, μ)
 
         # best solution up to now
-        x_best, μ_best, L_best, ∂L_best, L̂ = copy(x), copy(μ), -Inf, copy(∂L), algorithm.L̂
+        x_best, μ_best, L_best, ∂L_best, L̂ = copy(x), copy(μ), L, copy(∂L), algorithm.L̂
 
         wrapper = (func!, localization, x, μ, f_μ, f_xμ, ∂f_μ, ∂f_xμ) -> begin
             if typeof(localization) <: DualSubgradientMethod

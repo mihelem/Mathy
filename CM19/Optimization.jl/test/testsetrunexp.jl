@@ -11,6 +11,376 @@ problems2 = parse_dir(NetgenDIMACS, "Optimization.jl/test/gen/set2/")
 
 
 #=
+    Comparing subgradients
+=#
+path = "CM19/Optimization.jl/test/gen/set/"
+file = "netgen-1000-1-1-a-a-ns-0660"
+results = Tuple{String, Float64, Int64, Int64, Float64, Float64}[]
+push!(results, )
+model = solveQMCFBP(problem)
+L = begin
+    if termination_status(model) == MOI.OPTIMAL
+        objective_value(model)
+    else
+        Inf
+    end
+end
+subtypes(MOI.AbstractOptimizerAttribute)
+valueP = Ref{Cdouble}()
+getparam(model.inner, "ObjBoundC")
+ret = GRBgetdblattr(model, "ObjBoundC", valueP)
+L_l, L_u = objective_bound(model)
+
+for i in 1:20
+    Ls, L′, stage′, iter, tim = best_stater(path, file, 2^i, i, 1, 30, 1.0, 0.9975)
+    ϵ = get_ϵr(L, L′)
+    push!(ϵs, (2^i, ϵ))
+end
+allϵ = Dict{String, Array{Tuple{Int64, Float64}, 1}}()
+allϵ["RNM0.9975"] = ϵs
+ϵs = Tuple{Int64, Float64}[]
+sort!(ϵs)
+plot!(p)
+p2 = deepcopy(p)
+unzip(ϵs)
+save("RNM.jld", "ϵs", ϵs)
+plot!(p, (x->x[1]).(ϵs), (x->x[2]).(ϵs), title="Subgradient Comparison", xaxis=:log2, yaxis=:log2, label="RNM β=0.9975", xlabel="iterations", ylabel="ϵᵣₑₗ")
+savefig(p, "comparison.png")
+problems = parse_dir(NetgenDIMACS, "CM19/Optimization.jl/test/gen/set")
+function solve_with_restarts(
+    ::Type{V},
+    subgradient::SG,
+    problem::QMCFBProblem,
+    sg_update;
+    μ₀=nothing,
+    reiters::Array{Int64, 1},
+    restart::Bool=true,
+    todos::Set{String}) where {V, SG<:SubgradientMethod}
+
+    m, n = size(problem.E)
+
+    μ₀ = μ₀ === nothing ? zeros(Float64, m) : μ₀
+
+    if length(reiters) == 0
+        return
+    end
+    reiters = [0, reiters...]
+    Δreiters = reiters[2:end]-reiters[1:end-1]
+
+    algorithm = QMCFBPAlgorithmD1SG(;
+        localization=subgradient,
+        verbosity=1,
+        max_iter=Δreiters,
+        μ₀=μ₀,
+        ε=1e-6,
+        ϵ=1e-12);
+    test = get_test(algorithm;
+        problem=problem,
+        type=V)
+
+    if "plot" in todos
+        test.solver.options.memoranda = Set(["L_best", "i_best"])
+    end
+
+    problem = test.problem
+    @unpack Q, q, l, u, E, b = problem
+    Q╲ = view(Q, [CartesianIndex(i, i) for i in 1:size(Q, 1)])
+
+    is = []
+    Ls = []
+    function runtest()
+        for i in 1:length(Δreiters)
+            algorithm.max_iter = Δreiters[i]
+            run!(test)
+            if "plot" in todos
+                push!(Ls, test.result.memoria["L_best"]...);
+                push!(is, (reiters[i] .+ test.result.memoria["i_best"])...);
+            end
+            set!(algorithm, test.result)      # set initial status of algorithm
+            algorithm.stopped = !restart      # not stopped implies re-init subgradient method
+            sg_update(subgradient)
+        end
+        println()
+    end
+
+    runtest()
+    (test.result.result["L_best"], is, Ls)
+end
+
+# V, problem, sg_args, sg_kwargs, sg_update; μ₀=μ₀, reiters=reiters, restart=restart, todos=todos, L=L
+function rpolyak(
+    ::Type{V},
+    problem::QMCFBProblem,
+    sg_args::Tuple=(),
+    sg_kwargs::NamedTuple=(β=1.1),
+    sg_update=sg->nothing;
+    μ₀=nothing,
+    reiters::Array{Int64, 1},
+    restart::Bool=true,
+    todos::Set{String},
+    L::V) where {V, SG<:SubgradientMethod}
+
+    @show subgradient = Subgradient.PolyakStepSize(sg_args...; f_opt=-L, sg_kwargs...)
+    solve_with_restarts(
+        V,
+        subgradient,
+        problem,
+        sg_update;
+        μ₀=μ₀,
+        reiters=reiters,
+        restart=restart,
+        todos=todos)
+end
+
+function rfilteredpolyak(
+    ::Type{V},
+    problem::QMCFBProblem,
+    sg_args::Tuple=(),
+    sg_kwargs::NamedTuple=(β=1.1),
+    sg_update=sg->nothing;
+    μ₀=nothing,
+    reiters::Array{Int64, 1},
+    restart::Bool=true,
+    todos::Set{String},
+    L::V) where {V, SG<:SubgradientMethod}
+
+    @show subgradient = Subgradient.FilteredPolyakStepSize(sg_args...; f_opt=-L, sg_kwargs...)
+    solve_with_restarts(
+        V,
+        subgradient,
+        problem,
+        sg_update;
+        μ₀=μ₀,
+        reiters=reiters,
+        restart=restart,
+        todos=todos)
+end
+
+function radagrad(
+    ::Type{V},
+    problem::QMCFBProblem,
+    sg_args::Tuple=(),
+    sg_kwargs::NamedTuple=(α=1.0),
+    sg_update=sg->sg.α/=2;
+    μ₀=nothing,
+    reiters::Array{Int64, 1},
+    restart::Bool=true,
+    todos::Set{String},
+    L::V) where {V, SG<:SubgradientMethod}
+
+    @show subgradient = Subgradient.Adagrad(sg_args...; sg_kwargs...)
+    solve_with_restarts(
+        V,
+        subgradient,
+        problem,
+        sg_update;
+        μ₀=μ₀,
+        reiters=reiters,
+        restart=restart,
+        todos=todos)
+end
+
+function rnesterovmomentum(
+    ::Type{V},
+    problem::QMCFBProblem,
+    sg_args::Tuple=(),
+    sg_kwargs::NamedTuple=(α=1.0, β=0.975),
+    sg_update=sg->sg.α/=2;
+    μ₀=nothing,
+    reiters::Array{Int64, 1},
+    restart::Bool=true,
+    todos::Set{String},
+    L::V) where {V, SG<:SubgradientMethod}
+
+    @show subgradient = Subgradient.NesterovMomentum(sg_args...; sg_kwargs...)
+    solve_with_restarts(
+        V,
+        subgradient,
+        problem,
+        sg_update;
+        μ₀=μ₀,
+        reiters=reiters,
+        restart=restart,
+        todos=todos)
+end
+
+function run_solver(
+    method,
+    ::Type{V},
+    problem::QMCFBProblem,
+    sg_args::Tuple=(),
+    sg_kwargs::NamedTuple=(α=1.0, β=0.99),
+    sg_update=sg->sg.α/=2.0;
+    μ₀=nothing,
+    reiters::Array{Int64, 1},
+    restart::Bool=true,
+    todos::Set{String}) where {V, SG<:SubgradientMethod}
+
+    model = solveQMCFBP(problem)
+    L = begin
+        if termination_status(model) == MOI.OPTIMAL
+            objective_value(model)
+        else
+            Inf
+        end
+    end
+    if L == Inf
+        return (Inf, Inf, [], [])
+    end
+
+    (L, method(V, problem, sg_args, sg_kwargs, sg_update; μ₀=μ₀, reiters=reiters, restart=restart, todos=todos, L=L)...)
+end
+
+problem = problems["netgen-1000-1-1-a-a-ns-1000"]
+get_ϵr = (L, L_best) -> (L-L_best)/abs(L)
+
+# Exponential Iterations per size : Restarted Nesterov Momentum
+abstract type Iters end
+abstract type LinIters <: Iters end
+abstract type ExpIters <: Iters end
+
+function get_iters(::Type{LinIters}, stages, tot_iters)
+    tot_iters÷stages*[1:stages;]
+end
+
+function get_iters(::Type{ExpIters}, first, stages, tot_iters)
+    t = c*(x^s-1)/(x-1)
+    exp_search(x -> first*(x>1 ? (x^stages-1)/(x-1) : stages) ≥ tot_iters, (1, 1+tot_iters÷stages))
+end
+
+function get_iters(::Type{ExpIters}, first::Int64, last::Int64, stages::Int64)
+    x = (last/first)^(1/(stages-1))
+    (s -> Int64(ceil(first * x^s))).([0:stages-1;]) |>
+    v -> begin
+        for i in 2:length(v)
+            v[i] += v[i-1]
+        end
+        v
+    end
+end
+# RNM 55 2500 - Adagrad 45 8000
+its2 = get_iters(LinIters, 45, 8000)
+its = get_iters(ExpIters, 2^13, 2^14, 32)
+
+# Comparison
+keys(allϵ)
+allϵ["330_Adagrad32000_34"] = [zip(Int64.(is), Float64.(Ls))...]
+allϵ["330_NesterovMomentum0.99975_70"] = [zip(Int64.(is), Float64.(Ls))...]
+(L-allϵ["NesterovMomentum_β=0.975_sta=30"][end][2])/abs(L)
+
+p = plot()
+# # Polyak
+#a = load("dplots_filteredpolyak3.jld")["dplots"]["FilteredPolyak"]
+#plot!(p, a[1].is, (L .- a[1].Ls)/abs(L), title="Deflected RSGs Comparison", yaxis=:log10, label="Polyak", xlabel="iterations", ylabel="ϵᵣₑₗ")
+# # FilteredPolyak
+#plot!(p, a[2].is, (L .- a[2].Ls)/abs(L), yaxis=:log10, label="FilteredPolyak β=0.3333", xlabel="iterations", ylabel="ϵᵣₑₗ")
+# # Adagrad : 32 stages, 2^13
+#plot!(p, (x->x[1]).(allϵ["330_NesterovMomentum0.99975_70"]), (L .- (x->x[2]).(allϵ["330_NesterovMomentum0.99975_70"]))/abs(L), yaxis=:log10, label="NesterovMomentum β=0.99975 >32 stages", xlabel="iterations", ylabel="ϵᵣₑₗ", ylimits=(10.0^(-12), 1.2))
+p = plot()
+for α in ["3"]
+    L, L_best, is, Ls = run_solver(radagrad, Float64, problem, (), (α=parse(Float64, α),); reiters=its2, todos=Set{String}(["plot"]))
+    plot!(p, is, (L .- Ls)/abs(L), yaxis=:log10, label="RAdagrad α₀=$α", xlabel="iterations", ylabel="ϵᵣₑₗ")
+end
+p
+
+L, L_best, is, Ls = run_solver(radagrad, Float64, problem, (), (α=2^20,); reiters=[(2^20)÷80:(2^20)÷80:2^20;], todos=Set{String}(["plot"]))
+savefig(p, "1000_RNMvsRA.png")
+# # NesterovMomentum :
+allϵ["RNM0.975"]
+plot!(p, (x->x[1]).(allϵ["NesterovMomentum_β=0.975_sta=30"]), (L .- (x->x[2]).(allϵ["NesterovMomentum_β=0.975_sta=30"]))/abs(L), yaxis=:log10, label="NesterovMomentum β=0.975", xlabel="iterations", ylabel="ϵᵣₑₗ")
+#savefig(p, "RNMmany_iters.png")
+p = plot()
+for α in ["1"]
+    for β in ["0.975"]
+        L, L_best, is, Ls = run_solver(rnesterovmomentum, Float64, problem, (), (α=parse(Float64, α), β=parse(Float64, β)); reiters=its2, todos=Set{String}(["plot"]))
+        plot!(p, is, (L .- Ls)/abs(L),
+            yaxis=:log10,
+            label="RNM α=$α β=$β", xlabel="iterations", ylabel="ϵᵣₑₗ")
+    end
+end
+p
+Ls
+p2 = deepcopy(p)
+savefig(p, "000RNMvsAdagrad.png")
+1/(1-0.99975)
+
+
+# Adagrad
+p_all = deepcopy(p)
+L, L_best, is, Ls = run_solver(radagrad, Float64, problem, (), (α=4*8192.0,); reiters=[(2^20)÷34:(2^20)÷34:2^20;], todos=Set{String}(["plot"]))
+p = deepcopy(p_all)
+savefig(p, "drsg_compare.png")
+
+
+
+# Polyak
+function spolyak(it)
+    L, L_best, is, Ls = run_solver(rpolyak, Float64, problem, (), (β=2.0,), sg->nothing; reiters=[it], todos=Set{String}())
+    get_ϵr(L, L_best)
+end
+results = Tuple{Float64, Int64}[]
+push!(results, (10. .^[0:-1:-3;] |> ϵs -> zip(ϵs, (ϵ -> exp_search(it -> spolyak(it)<ϵ, (1, 2^20))).(ϵs)))...)
+dresults = Dict{String, typeof(results)}()
+dresults["Polyak"] = results
+
+dplots = Dict{String, Array{NamedTuple{(:legend, :L, :L_best, :is, :Ls), Tuple{String, Float64, Float64, Array{Int64, 1}, Array{Float64, 1}}}, 1}}()
+push!(dplots["Polyak"], (legend="β=2.0", L=L, L_best=L_best, is=is, Ls=Ls))
+
+
+mutex = Threads.Mutex()
+dplots["Polyak"] = []
+function go1(β::String)
+    L, L_best, is, Ls = run_solver(rpolyak, Float64, problem, (), (β=parse(Float64, β),), sg->nothing; reiters=[2^20], todos=Set{String}(["plot"]))
+    Threads.lock(mutex)
+    push!(dplots["Polyak"], (legend="β="*β, L=L, L_best=L_best, is=is, Ls=Ls))
+    Threads.unlock(mutex)
+end
+dplots["FilteredPolyak"] = []
+function go2(α_mul::String, β::String, reiters::Array{Int64, 1}, relegend::String)
+    L, L_best, is, Ls = run_solver(rfilteredpolyak, Float64, problem, (), (α_mul=parse(Float64, α_mul), β=parse(Float64, β),), sg->sg.β/=1000; reiters=reiters, todos=Set{String}(["plot"]))
+    #Threads.lock(mutex)
+    push!(dplots["FilteredPolyak"], (legend=" β="*β*" "*relegend, L=L, L_best=L_best, is=is, Ls=Ls))
+    #Threads.unlock(mutex)
+end
+import Base.Threads.@spawn
+dplots["FilteredPolyak"]
+
+p = plot()
+go2("1.0", "0.0", [2^25], "2^25 ╲")
+(x -> plot!(p, x.is, (x.L .-  x.Ls)/abs(x.L), title="Filtered Polyak", xaxis=:log2, yaxis=:log2, label=x.legend, xlabel="iterations", ylabel="ϵᵣₑₗ"))(dplots["FilteredPolyak"][end])
+go2("1.0", "0.3333", [2^25], "2^25 ╲")
+(x -> plot!(p, x.is, (x.L .-  x.Ls)/abs(x.L), title="Filtered Polyak", xaxis=:log2, yaxis=:log2, label=x.legend, xlabel="iterations", ylabel="ϵᵣₑₗ"))(dplots["FilteredPolyak"][end])
+
+tasks = [@spawn go2("1.6", "0.3", [2^14], "restart=2^[14]")]
+push!(tasks, @spawn go2("1.6", "0.3", [2^20], "restart=2^[20]"))
+push!(tasks, @spawn go2("1.6", "0.6", [2^20], "restart=2^[20]"))
+push!(tasks, @spawn go2("1.6", "0.9", [2^20], "restart=2^[20]"))
+push!(tasks, @spawn go2("1.6", "0.99", [2^20], "restart=2^[20]"))
+push!(tasks, @spawn go2("1.6", "0.99", 2 .^[0:20;], "restart=2^[0:20]"))
+push!(tasks, @spawn go2("1.6", "0.99", [2^14:2^14:2^20;], "restart=[2^14:2^14:2^20]"))
+push!(tasks, @spawn go2("1.6", "0.99", [2^14:2^16:2^20;], "restart=[2^14:2^16:2^20]"))
+p = plot()
+for task in tasks
+    wait(task)
+end
+sort!(dplots["FilteredPolyak"])
+@spawn go1("1.0")
+@spawn go1("1.33")
+@spawn go1("1.66")
+@spawn go1("2.0")
+p = plot()
+save("dplots_filteredpolyak3.jld", "dplots", dplots)
+savefig(p, "filteredpolyak.png")
+sort!(dplots["Polyak"])
+(x -> plot!(p, x.is, (x.L .-  x.Ls)/abs(x.L), title="Filtered Polyak", xaxis=:log2, yaxis=:log2, label=x.legend, xlabel="iterations", ylabel="ϵᵣₑₗ"))(dplots["FilteredPolyak"][8])
+cunna = 0
+#=
+    END Comparing subgradients
+=#
+
+
+
+#=
     Testing mildly singular instances
 =#
 
