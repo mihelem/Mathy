@@ -87,7 +87,6 @@ function run!(H::SPEKHeuristic)
             x[edge] -= io*flux
         end
         b′[node] += flux
-        # println("flux: $flux => b′[$sink] -= $flux,  b′[$node] += $flux")
     end
     function get_dist!(distances, sources, visit_d, in_queue, parent, visit_count, ϵₚ=ϵₚ)
         dist_sum = 0
@@ -132,7 +131,6 @@ function run!(H::SPEKHeuristic)
         distances[sources] .= 0
         parent[sources] .= (source->(0, 0, source)).(sources)
         while length(visit_d)>0
-            #print("|")
             node = pop_node()
             fanio = get_fanio(node)
             distance = distances[node]
@@ -193,7 +191,6 @@ function run!(H::SPEKHeuristic)
                 sink = sinks[argmin(distances[sinks])]
                 flux = get_max_flux(sink)
                 flow_flux!(sink, flux)
-                #println("flux -> $sink: $flux")
             else
                 (sink->flow_flux!(sink, get_max_flux(sink))).(sinks)
             end

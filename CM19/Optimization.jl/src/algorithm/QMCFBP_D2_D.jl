@@ -1,10 +1,7 @@
 """
 # ---------------------------- Dual algorithm D2 -----------------------------
+                              - WIP (not usable) -
 # Equality and Box Constraints dualised
-WIP
-## TODO
-* adapt to new framework
-* implement REAL projected gradient (the present one is not a real projection...)
 """
 mutable struct QMCFBPAlgorithmD2D <: OptimizationAlgorithm{QMCFBProblem}
     localization::DescentMethod

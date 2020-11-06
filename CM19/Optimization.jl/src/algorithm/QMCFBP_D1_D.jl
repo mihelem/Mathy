@@ -277,7 +277,6 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         ᾱ, outward, p = convert(val_t, 0.0), false, CartesianIndex(0,0)
         while length(pq) > 0
             next_ᾱ, next_outward, next_p = peek(pq)[2];
-            # verba(1, "\nnext_ᾱ = $next_ᾱ")
             if filter_ᾱ(next_p, next_outward, 𝔅) == false
                 verba(1, "WARNING: filtered an ᾱ")
                 dequeue!(pq)
@@ -291,9 +290,7 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
                     end
                 else
                     α_frac[:] = get_α_frac()
-                    # print("α_frac = $(α_frac)")
                     α = α_frac[1] / α_frac[2]
-                    # println(" ::  would like α = $α")
                     if (s*(α-ᾱ) |> a -> (a ≤ 0.0 || isnan(a)))
                         return (ᾱ, 𝔅)
                     end
@@ -310,8 +307,6 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
                 return (α, 𝔅)
             end
             𝔅[i, [2, [1, 3][lu]]] = [!outward, outward]
-            # α_frac[1] -= (2outward-1)*Eᵀd[i]*([l[i], u[i]][lu] - x̃₀[i])
-            # α_frac[2] = Eᵀd[𝕴]'Q̃╲[𝕴].*Eᵀd[𝕴] # stablier than just adding summand
             dequeue!(pq)
         end
     end
@@ -322,7 +317,6 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         inbox = (x, u, l, 𝔅, m, ϵ) -> (𝔅[m, :] = in_box(x[m], l[m], u[m], ϵ=ϵ))
         inbox(Qx̃, Qu, Ql, 𝔅, kerny, -ϵₘ); #inbox(x̃, u, l, 𝔅, .~kerny, ϵₘ)
         inbox(Qx̃, Qu, Ql, 𝔅, .~kerny, 0.0) # ||was ϵₘ!!
-        # println("before line search 𝔅 : $𝔅")
         𝔐μ = .~simeq.(d / norm(d, Inf), 0.0, ϵ)
         Eᵀd, bᵀd = E[𝔐μ, :]'d[𝔐μ], b[𝔐μ]'d[𝔐μ]
         𝔐x = .~simeq.(Eᵀd / norm(Eᵀd, Inf), 0.0, ϵ)
@@ -333,7 +327,6 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         pq₊, pq₋, ΔQx̃, ᾱs = get_priority_ΔQx̃(Eᵀμ′, Eᵀd′, q′, 𝔅′, Ql′, Qu′; ϵ=ϵₘ)
 
         dᵀ∇L = Eᵀd′⋅x′ - bᵀd
-        # println("dᵀ∇L = $dᵀ∇L")
 
         α, next_𝔅′ =
             line_search(pq₊, pq₋, μ, 𝔅′, Q╲′, kerny′, q′, Eᵀd′, bᵀd, Eᵀμ′, l′, u′)
@@ -341,13 +334,11 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
         next_μ = μ + α*d.*𝔐μ
         next_𝔅 = copy(𝔅)
         next_𝔅[𝔐x, :] = next_𝔅′
-        # println("next_𝔅 : $next_𝔅")
         next_x = copy(x)
         next_x[𝔐x] = min.(max.((-Eᵀμ′-α*Eᵀd′-q′)./ Q╲′, l′), u′)
         next_x[next_𝔅[:, 1]] = l[next_𝔅[:, 1]]
         next_x[next_𝔅[:, 3]] = u[next_𝔅[:, 3]]
         nanny = (next_𝔅[:, 2] .& kerny)
-        # println("nanny : $nanny\nkerny : $kerny\nnext_𝔅[:, 2] : $(next_𝔅[:, 2])")
         if any(nanny)
             best_primal_∂!(next_x, nanny, E, b, l, u)
         end
@@ -401,9 +392,6 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             best_primal_∂!(x′, nanny, E, b, l, u)
         end
         L_best = x′⋅(0.5*Q╲.*x′ + q) + Eᵀμ⋅x′ - μ'b
-        if L_best < L′
-            @show (L_best, L′) # DEBUG: REMOVE
-        end
 
         return x′, μ′, L_best, 𝔅
     end
@@ -481,27 +469,15 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
             @memento λ = update_λ(λ, λ_rate, norm∂L)
 
             x′, μ′, 𝔅′, ᾱs = step(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny, ϵ=ϵₘ, ϵₘ=ϵₘ)
-            #𝔅_wrong = check(μ′, 𝔅′)
-            #if any(𝔅_wrong)
-            #    println("wrong 𝔅/kerny_null: ", count(𝔅_wrong), count(kerny .& 𝔅′[:, 2]))
-            #end
             ∂L′ = E*x′-b
             L′ = x′⋅(0.5*Q╲.*x′ + q) + μ′⋅∂L′
-            #@show (L′, L, L′<L)
             if L′ < L
-                #println("Previous Broken : $L′ < $L")
                 d[:] = ∂L
                 x′, μ′, 𝔅′, ᾱs′ = step(d, x, μ, Q╲, Qu, Ql, q, E, b, kerny, ϵ=ϵₘ, ϵₘ=ϵₘ)
-                #𝔅_wrong = check(μ′, 𝔅′)
-                #if any(𝔅_wrong)
-                #    println("Inside: wrong 𝔅/kerny_null: ", count(𝔅_wrong), "/", count(kerny .& 𝔅′[:, 2]))
-                #end
                 ∂L′[:] = E*x′-b
                 L′ =  x′⋅(0.5*Q╲.*x′ + q) + μ′⋅∂L′
-                #@show ("inside", L′, L, L′<L)
                 if L′ < L
                     # line search plot
-                    #println("Inside: Previous Broken : $L′ < $L")
                     @memento lsp = draw_line_search(μ, d, minimum(ᾱs′), maximum(ᾱs′), plot_steps)
                     @memento alphas = [ᾱs′ (α->get_L(μ + α*d)).(ᾱs′)]
 
@@ -510,11 +486,9 @@ function run!(algorithm::QMCFBPAlgorithmD1D, 𝔓::QMCFBProblem; memoranda=Set([
                 end
             end
             x[:], μ[:], 𝔅 = x′, μ′, 𝔅′
-            # println("\nx : $x")
             # TODO: better @memento
             ∂L₀[:], ∂L[:] = ∂L, ∂L′
             β = max(∂L⋅(∂L - ∂L₀) / (∂L₀⋅∂L₀), 0.0)
-            # println("β : $β")
             d[:] = ∂L + β*d
         end
 

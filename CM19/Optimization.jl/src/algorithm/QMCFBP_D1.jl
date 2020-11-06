@@ -36,7 +36,6 @@ function primal_from_dual(problem::QMCFBProblem, μ;
         solver=OptimizationSolver{MinQuadratic.MQBProblem}())
     Optimization.run!(instance)
     x[nanny] = instance.result.result["x"]
-    #@show count(.~(l .≤ x .≤ u))
     x
 end
 """
@@ -64,9 +63,9 @@ for i in 1:20
 L_lb = test.result.result["L_best"]
 μ = test.result.result["μ_best"]
 problem = test.problem
-@unpack Q, q, l, u, E, b = 𝔓
+@unpack Q, q, l, u, E, b = problem
 x = Optimization.MinCostFlow.primal_from_dual(problem, μ)
-heu = BFSHeuristic(𝔓, x; ϵ=1e-8)
+heu = Optimization.MinCostFlow.BFSHeuristic(problem, x; ϵ=1e-8)
 init!(heu)
 x′, ∂L′ = run!(heu)
 L_ub = 0.5*x′⋅Q*x′+q'x′

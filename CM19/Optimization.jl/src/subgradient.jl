@@ -352,7 +352,7 @@ function step!(M::PolyakEllipStepSize, f, ∂f, x)
     ξ′ = Bᵀg′ / normBᵀg′
     μ = ξ⋅ξ′
     if μ < 0.0
-        η = ϵ+√(1.0-min(μ*μ, 1.0)) |> γ -> (1.0/γ - 1.0)*ξ′ - μ*ξ/γ
+        η = M.ϵ+√(1.0-min(μ*μ, 1.0)) |> γ -> (1.0/γ - 1.0)*ξ′ - μ*ξ/γ
         M.B += (M.B*η)*ξ′'
     end
     (x′, h, Bξ)
@@ -406,6 +406,7 @@ function step!(M::FilteredPolyakStepSize, f, ∂f, x)
 end
 
 # TODO Camerini, Fratta, Maffioli
+#=
 mutable struct CFMStepSize <: DeflectedSubgradientMethod
     get_γ   # γ ∈ [0, 2] - suggested value 1.5
 
@@ -415,6 +416,7 @@ end
 function step!(M::CFMStepSize, f, ∂f, x)
 
 end
+=#
 
 mutable struct Adagrad <: DeflectedSubgradientMethod
     α # learning rate, typical 0.01 → 1.0

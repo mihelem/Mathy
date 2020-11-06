@@ -1,7 +1,7 @@
 """
 # ---------------------------- Dual algorithm D3 -----------------------------
+                 WIP: really, just copy pasted from old commit!
 # Null Space method + Box Constraints dualised
-WIP: really, just copy pasted from old commit!
 """
 mutable struct QMCFBPAlgorithmD3D <: OptimizationAlgorithm{QMCFBProblem}
 end

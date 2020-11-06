@@ -1,3 +1,5 @@
+# Solve with external solver Gurobi
+
 using JuMP, Gurobi, Parameters
 
 function solveQMCFBP(problem, x₀=nothing)

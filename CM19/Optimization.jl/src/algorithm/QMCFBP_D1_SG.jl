@@ -229,7 +229,6 @@ function run!(
                     μ -> -get_a_∂L(μ),
                     (x, μ) -> get_∂L(x, μ))
 
-            #step!(localization, μ->-get_L(μ), μ->-get_a_∂L(μ), μ)
             @memento μ[:] = μ_t
             @memento x[:] = get_an_x(μ)
             @memento L = get_L(x, μ)

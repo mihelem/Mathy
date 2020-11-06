@@ -1,3 +1,5 @@
+# Experiments for the report (interactive Julia)
+
 include("testsetrun.jl")
 include("dmacio.jl")
 include("grb.jl")
@@ -8,6 +10,158 @@ using JLD
 using HDF5
 pyplot()
 problems2 = parse_dir(NetgenDIMACS, "Optimization.jl/test/gen/set2/")
+
+# MODIFY
+#   "netgen-1000-1-ns-0000-a-a-1"   <-   "netgen-1000-1-1-a-a-ns-0000"
+tab97 = load("CM19/report/result/gurobi/tables0907.jld")["tables"]
+ks97 = sort([k for (k, v) in tab97 if size(v, 2)>0])
+dks = sort!([(join(split(k, '-')[[1, 2, 3, 7, 8, 5, 6, 4]], '-'), val) for (k, val) in tab97 if size(val, 2)>0])
+ddks = Dict()
+for (k, val) in dks
+    ks = split(k, '-')
+    ke = join([ks[1:3]; '*'; ks[[6, 7, 4, 5]]; ], '-')
+    if !haskey(ddks, ke)
+        ddks[ke] = [val]
+    else
+        push!(ddks[ke], val)
+    end
+end
+ddd = Dict()
+for (k, val) in ddks
+    ks = split(k, '-')
+    ke = join([ks[1:4]; '*'; '*'; ks[7:8]; ], '-')
+    if !haskey(ddd, ke)
+        ddd[ke] = [(k, val)]
+    else
+        push!(ddd[ke], (k, val))
+    end
+end
+ddd
+for (k, val) in ddd
+    sort!(val)
+end
+dddd = Dict()
+for (k, val) in ddd
+    ks = split(k, '-')
+    ke = join([ks[1:2]; '*'; ks[4:8]; ], '-')
+    if !haskey(dddd, ke)
+        dddd[ke] = [(k, val)]
+    else
+        push!(dddd[ke], (k, val))
+    end
+end
+for (k, val) in dddd
+    sort!(val)
+end
+dddd
+
+
+colrs = [:blue, :green, :grey2, :magenta, :gold, :red]
+# kwargs : xlabel, ylabel, title, ylims, label, color
+function draw_plot(myp, x, y, kwargs)
+    i = reverse(sortperm(x))
+    @show x = log10.(x)
+    @show y
+
+    A = [ones(length(x)) x]
+    l = (v -> minimum(y[findall(x .== v)])).(x)
+    u = (v -> maximum(y[findall(x .== v)])).(x)
+
+    c = A\y
+    f = c[1]*ones(length(x)) + c[2]*x
+    plot!(myp,
+        10 .^x[i], f[i];
+        ribbon = (f[i] - l[i], u[i] - f[i]),
+        fillalpha=0.2,
+        linewidth=1.5,
+        xaxis=:log10, alpha=1.0,
+        xflip=true,
+        legend=:topleft,
+        kwargs...)
+end
+function draw_plot_logy(myp, x, y, kwargs)
+    i = reverse(sortperm(x))
+    @show x = log10.(x)
+    @show y = log10.(y)
+
+    A = [ones(length(x)) x]
+    l = (v -> minimum(y[findall(x .== v)])).(x)
+    u = (v -> maximum(y[findall(x .== v)])).(x)
+
+    c = A\y
+    f = c[1]*ones(length(x)) + c[2]*x
+    plot!(myp,
+        10 .^x[i], 10 .^f[i];
+        ribbon = (10 .^f[i] - 10 .^l[i], 10 .^u[i] - 10 .^f[i]), fillalpha=0.2,
+        linewidth=1.5,
+        xaxis=:log10, yaxis=:log10, alpha=1.0,
+        xflip=true,
+        legend=:topleft,
+        kwargs...)
+end
+
+
+#=
+plot!(pu,
+    10.0 .^(.- [1, 2, 3, 4, 5, 6]),
+    arr,
+    seriestype=:scatter,
+    legend=:topleft,
+    xlabel=L"\epsilon_{rel}",
+    ylabel="stages",
+    title=title,
+    xaxis=:log2,
+    #yaxis=:log10,
+    #ylims=(ylimsmin, ylimsmax),
+    ylims=(1.5, 20.5),
+    xflip=true,
+    markeralpha=malphas[i],
+    markershape=mshapes[i],
+    color=colors[i],
+    strokecolor=:black,
+    label="* ← "*string(ks[i]))
+=#
+
+
+
+rrrr = Dict()
+ϵrng = 10. .^-[1:6;]
+pcolrs = Dict(zip(["a-a", "a-b", "b-a", "b-b"], [:blue, :green, :grey2, :magenta]))
+for (kkk, vvv) in dddd
+    for (kk, vv) in vvv
+        phiters, piters = plot(), plot()
+        labels = Set{String}()
+        for (k, vs) in vv
+            label = join(split(k, '-')[5:6], '-')
+            if label in labels
+                continue
+            else
+                push!(labels, label)
+            end
+            ϵs = []
+            hiters = []
+            iters = []
+            for v in vs
+                v_tot = [1:size(v, 1);] .* v
+                v_tot[v_tot .< 0] .= 100001
+                hiter = [argmin(col) for col in eachcol(v_tot)]
+                iter = v[CartesianIndex.([zip(hiter, [1:length(hiter);])...])]
+                good = iter .> 0
+                push!(ϵs, ϵrng[good]...)
+                push!(hiters, hiter[good]...)
+                push!(iters, iter[good]...)
+            end
+            draw_plot(phiters, ϵs, Float64.(hiters), (xlabel="ϵᵣₑₗ", ylabel="stages", title=kk, ylims=(1, 20), label=label, color=pcolrs[label]))
+            draw_plot_logy(piters, ϵs, iters, (xlabel="ϵᵣₑₗ", ylabel="iterations per stage", title=kk, ylims=(1, 10^5), label=label, color=pcolrs[label]))
+            #draw_plot(piters, ϵs, Float64.(iters), (xlabel="ϵᵣₑₗ", ylabel="iterations per stage", title=kk, ylims=(1, 5000), label=label, color=pcolrs[label]))
+        end
+        filename = String([c=='*' ? '_' : c for c in kk])
+        savefig(phiters, "hiters_"*filename*".png")
+        savefig(piters,  "iters_"*filename*".png")
+    end
+end
+
+
 
 
 #=
@@ -1826,7 +1980,7 @@ end
 
 mtimes = Dict{String, Tuple{Float64, Float64, Float64}}()
 mtimes2 = Dict{String, Tuple{Float64, Float64, Float64}}()
-piter = parse.(TestgenParams, keys(problems))
+ piter = parse.(TestgenParams, keys(problems))
 ipiter = [zip(piter, keys(problems))...]
 sort!(ipiter)
 for i in 1:5:length(problems)

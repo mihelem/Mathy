@@ -1,3 +1,5 @@
+# Run some benchmarks
+
 include("benchmark.jl")
 
 heus = ["min_grad", "EK", "mg_EK", "SPEK", "mg_SPEK", "SPEKn", "mg_SPEKn"]

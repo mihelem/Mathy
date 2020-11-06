@@ -81,7 +81,6 @@ function run!(H::EKHeuristic)
             x[edge] -= io*flux
         end
         b′[node] += flux
-        # println("flux: $flux => b′[$sink] -= $flux,  b′[$node] += $flux")
     end
 
     sources = findall(b′ .< -ϵ)

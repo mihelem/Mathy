@@ -176,7 +176,6 @@ function run!(
                     @memento params_best = Dict(zip(params_k, x[1]))
                     @memento result_best = x[2]
                 end
-            # set!(algorithm_best, result_best)   # trial
         end
         S = begin
             if restart_params
@@ -186,8 +185,6 @@ function run!(
             end
         end
         set!(algorithm_best, result_best)
-        # loky = algorithm_best.localization
-        # @memento loky = loky
         set_params!(algorithm_best, params_best)
         algorithm_best.max_iter = iter_with_no_search
         @memento result_best = run!(algorithm_best, problem, memoranda=memoranda)
@@ -221,7 +218,6 @@ function plot_helper(plotter,
 
     data = [[el[k] for el in d if haskey(el, k)] for k in ordinatas]
     label = permutedims(string.(ordinatas))
-    #return Plots.plot(abscissa, data, label=label)
     plotter(abscissa, data; label=label, args...)
 end
 function plot(d::Array{Dict{K, V}, 1};

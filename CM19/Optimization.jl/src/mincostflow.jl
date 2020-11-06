@@ -1,17 +1,6 @@
 """
     MinCostFlow submodule of Optimization
 
-
-**Examples**
-
-__Quadratic MinCostFlow Boxed__
-```julia
-algorithm = QMCFBPAlgorithmD1(descent=GradientDescent(), verbosity=0, max_iter=20, ϵₘ=1e-10, ε=1e-5, cure_singularity=false)
-test = get_test(algorithm, m=5, n=8, singular=0)
-run!(test)
-θ = test.result.memoria["θ"]    # fictitious θ
-do_plot = i -> Plots.plot([j for j in 1:length(θ[i])], θ[i])
-```
 """
 module MinCostFlow
 
@@ -78,17 +67,19 @@ function run!(solver::OptimizationSolver{QMCFBProblem}, problem::QMCFBProblem)
 end
 
 # (P)D1 : Saddle Point with Descent Methods
+# - Naif
 include("algorithm/QMCFBP_PD1_D.jl")
-# D1 : Subgradient Methods - WIP
+# D1 : Subgradient Methods
 include("algorithm/QMCFBP_D1_SG.jl")
-# D1 : Descent Methods, also with specialised exact line search - WIP
+# D1 : Descent Methods, also with specialised exact line search
+# WIP, working for almost nonsingular instances
 include("algorithm/QMCFBP_D1_D.jl")
 # D1 : Commons
 include("algorithm/QMCFBP_D1.jl")
 # D2 : Descent Methods, also with specialised exact line search -WIP
-include("algorithm/QMCFBP_D2_D.jl")
+# include("algorithm/QMCFBP_D2_D.jl")
 # D3 : Descent Methods - WIP
-include("algorithm/QMCFBP_D3_D.jl")
+# include("algorithm/QMCFBP_D3_D.jl")
 
 # --------------------------- Heuristic -----------------------------------
 # About heuristic: Projecting in the feasible space could be done with the
@@ -106,7 +97,8 @@ function generate_quadratic_min_cost_flow_boxed_problem(
     m,
     n;
     singular=0,
-    active=0)
+    active=0,
+    inside=10.0)
 
     Q = spdiagm(
         0 => [sort(rand(type, n-singular), rev=true); zeros(type, singular)])
@@ -118,8 +110,8 @@ function generate_quadratic_min_cost_flow_boxed_problem(
         E[v, i] = -1
     end
     x = rand(eltype(Q), n)
-    l = -10*rand(eltype(Q), n)+x
-    u = 10*rand(eltype(Q), n)+x
+    l = -inside*rand(eltype(Q), n)+x
+    u = inside*rand(eltype(Q), n)+x
     Qu, Ql = Q*u, Q*l
 
     # prepare q such that the optimal point of the free    ½xᵀQx+qᵀx
@@ -293,8 +285,8 @@ export  run!,
         get_reduced,
         get_graph_components,
         generate_quadratic_min_cost_flow_boxed_problem,
-        QMCFBPAlgorithmD3D,
-        QMCFBPAlgorithmD2D,
+        #QMCFBPAlgorithmD3D,
+        #QMCFBPAlgorithmD2D,
         QMCFBPAlgorithmD1D,
         QMCFBPAlgorithmD1SG,
         QMCFBPAlgorithmPD1D,

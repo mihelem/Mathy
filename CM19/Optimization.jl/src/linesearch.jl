@@ -31,9 +31,6 @@ end
 function fibonacci_search(f, a, b, n; ϵ=0.01)
     F = get_fibonaccis(n+1)
     ρ::Float64 = convert(Float64, F[n])/convert(Float64, F[n+1])
-    # φ = (1+√5)/2
-    # s = (1-√5)/(1+√5)
-    # ρ = (1-s^n) / (φ*(1-s^(n+1)))
 
     d = (1-ρ)*a + ρ*b
     yd = f(d)
@@ -42,11 +39,10 @@ function fibonacci_search(f, a, b, n; ϵ=0.01)
         yc = f(c)
         if yc < yd
             d, b, yd = c, d, yc
-        else 
+        else
             a, b = b, c
         end
         ρ = convert(Float64, F[i-1])/convert(Float64, F[i])
-        #ρ = (1-s^(i-1)) / (φ*(1-s^i))
     end
     c = ϵ*a + (1-ϵ)*d
     yc = f(c)
@@ -54,7 +50,7 @@ function fibonacci_search(f, a, b, n; ϵ=0.01)
         b, d, yd = d, c, yc
     else
         b, a = c, b
-    end 
+    end
 
     return a < b ? [a, b] : [b, a]
 end
@@ -102,8 +98,6 @@ end
 function line_search(f, x, d)
     objective = α -> f(x + α*d)
     a, b = bracket_minimum(objective)
-   # α = minimize(objective, a, b)
-   # return x + α*d
 end
 
 end     # end module LineSearch

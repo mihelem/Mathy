@@ -12,7 +12,7 @@ using Optimization
 # min_x ½x'Qx+qx     with box constraints    l .<= x .<= u     and    Q >= 0
 algorithm =
 	MQBPAlgorithmPG1(
-		descent=QuadraticBoxPCGDescent(),
+		localization=QuadraticBoxPCGDescent(),
 		verbosity=1,
 		max_iter=1000,
 		ε=1e-7,
@@ -341,8 +341,8 @@ export  run!,
         get_reduced,
         get_graph_components,
         generate_quadratic_min_cost_flow_boxed_problem,
-        QMCFBPAlgorithmD3D,
-        QMCFBPAlgorithmD2D,
+        #QMCFBPAlgorithmD3D,
+        #QMCFBPAlgorithmD2D,
         QMCFBPAlgorithmD1D,
         QMCFBPAlgorithmD1SG,
         QMCFBPAlgorithmPD1D,
@@ -416,16 +416,6 @@ end
 
 end # end module Optimization
 
-# examples
-# using Revise
-# includet("optimization.jl")
-# using .Optimization
-# algorithm = MQBPAlgorithmPG1(descent=QuadraticBoxPCGDescent(), verbosity=1, max_iter=1000, ε=1e-7, ϵ₀=1e-8)
-# test = get_test(algorithm, n=10)
-# test.solver.options.memoranda = Set(["normΠ∇f"])
-# include("optimization.jl"); using .Optimization; algorithm = MQBPAlgorithmPG1(descent=QuadraticBoxPCGDescent(), verbosity=1, max_iter=1000, ε=1e-7, ϵ₀=1e-8); test = get_test(algorithm, n=10); test.solver.options.memoranda = Set(["normΠ∇f"])
-
-# How to save Plots:
 """
 ```julia
 #First, generate your plot using Plots.jl:

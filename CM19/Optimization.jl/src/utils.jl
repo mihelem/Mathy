@@ -62,8 +62,8 @@ end
 ```julia
 
 **Iteration recorder**.
-Against macro hygiene, it is creating a dictionary called `memoria`, in which to save
-the requested intermediate results of computations.
+Against macro hygiene, it is creating a dictionary called `memoria`, where
+the requested intermediate results of computations are saved.
 
 **Example**
 ```julia

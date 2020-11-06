@@ -8,7 +8,7 @@ function doit(K)
                 for cf in ['a', 'b']
                     for cq in ['a', 'b']
                         for scale in ["ns"]
-                            run(`./Optimization.jl/test/gen/pargen $n $ρ $k $cf $cq $scale`)
+                            run(`./CM19/Optimization.jl/test/gen/pargen $n $ρ $k $cf $cq $scale`)
                         end
                     end
                 end
@@ -81,11 +81,11 @@ end
 include("../../dmacio.jl")
 problems = parse_dir(NetgenDIMACS, path)
 
-problem = parse(NetgenDIMACS, "Optimization.jl/test/gen/set/netgen-1000-1-1-b-b-ns")
+problem = parse(NetgenDIMACS, "CM19/Optimization.jl/test/gen/set/netgen-1000-1-1-b-b-ns")
 parames = parse(PargenParams, "netgen-1000-1-1-a-a-ns.dmx")
 parames = parse(TestgenParams, "netgen-1000-1-1-a-a-ns-666.dmx")
 
-mypath = "Optimization.jl/test/gen/set/"
+mypath = "CM19/Optimization.jl/test/gen/set/"
 for filename in readdir(path)
     if length(split(filename, '-')) == 7
         rm(path*filename)

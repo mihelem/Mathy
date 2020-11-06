@@ -1,4 +1,4 @@
-# solve with JuMP, to double check our implementation
+# Solve with JuMP, to double check our implementation
 
 using JuMP
 using Ipopt
@@ -26,7 +26,6 @@ function check_nonempty_constraints(𝔓, x₀)
     @variable(model, x[1:size(x₀, 1)])
     @objective(model, Min, (E*x-b)'*(E*x-b))
     objective_function(model, QuadExpr)
-    #@constraint(model, con, E*x .== b )
     @constraint(model, con2, l .<= x .<= u)
 
     optimize!(model)

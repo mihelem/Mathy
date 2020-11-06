@@ -13,10 +13,12 @@ test = get_test(algorithm, m=15, n=30, singular=8);
 test.solver.options.memoranda = Set(["norm∂L_best", "L_best","i_best"])
 run!(test)
 x = test.result.result["x_best"]
-𝔓 = test.problem; Q, q, l, u, E, b = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b);
-heu = BFSHeuristic(𝔓, x)
+𝔓 = test.problem;
+Q, q, l, u, E, b = (𝔓.Q, 𝔓.q, 𝔓.l, 𝔓.u, 𝔓.E, 𝔓.b);
+heu = Optimization.MinCostFlow.BFSHeuristic(𝔓, x)
 init!(heu)
 x′, b′ = run!(heu)
+
 A = Optimization.MinCostFlow.incidence_to_adjacency(E)
 using GraphRecipes, Plots
 graphplot(A, curvature_scalar=0.01, names=1:5, markersize=0.2, arrow=arrow(:closed, :head, 1, 1))

@@ -94,15 +94,15 @@ include("algorithm/MQBP_P_PG.jl")
 
 # -------------- Quadratic Boxed Problem Generator -------------- #
 # TODO: Add custom active constraints %
-function generate_quadratic_boxed_problem(type, n; active=0, singular=0)
+function generate_quadratic_boxed_problem(type, n; active=0, singular=0, inside=10.0, outside=0.1)
     E = rand(type, n-singular, n)
     x = rand(type, n)
     q = -E*x
     q = [q; zeros(type, singular)]
-    l, u = -10.0*rand(type, n) + x, 10.0*rand(type, n) + x
+    l, u = -inside*rand(type, n) + x, inside*rand(type, n) + x
     active = min(active, n)
-    l[n-active+1:n] .-= 11.
-    u[n-active+1:n] .-= 11.
+    l[n-active+1:n] .-= (1. + outside)*inside
+    u[n-active+1:n] .-= (1. + outside)*inside
 
     return MQBProblem(E'E, q, l, u)
 end

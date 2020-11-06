@@ -1,5 +1,5 @@
-# TODO
 # --------------------- Primal Dual algorithm PD1 ------------------------- #
+#                        Just to give it a try 
 mutable struct QMCFBPAlgorithmPD1 <: OptimizationAlgorithm{QMCFBProblem}
     localization::DescentMethod
     verba       # verbosity utility
@@ -31,11 +31,6 @@ mutable struct QMCFBPAlgorithmPD1 <: OptimizationAlgorithm{QMCFBProblem}
             p₀=p₀)
     end
 end
-# about memorabilia
-# names of the variables that can be set to be recorded during execution;
-# by now it is a set; in the future it could become a dictionary, since
-# to each variable in the mathematical domain we can have many different
-# names in the program
 function set!(algorithm::QMCFBPAlgorithmPD1;
     localization=nothing,
     verbosity=nothing,
@@ -87,7 +82,7 @@ function run!(algorithm::QMCFBPAlgorithmPD1, 𝔓::QMCFBProblem; memoranda=Set([
             ∇L
         end
 
-    # using ∇L = (∇_x, -∇_μ) to have descent direction for everyone
+    # using ∇L = (∇_x, -∇_μ) to have descent direction for all
     get_∇L = p -> (x=get_x(p); μ=get_μ(p); [Q*x+q+E'μ; -E*x+b])
     get_Π∇L = p -> Π∇!(p, get_∇L(p))
 

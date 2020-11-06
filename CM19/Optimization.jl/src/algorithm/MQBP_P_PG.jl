@@ -258,7 +258,4 @@ function run!(algorithm::MQBPAlgorithmPG1, 𝔓::MQBProblem; memoranda=Set([]))
     end
 
     solve(localization, x, Q, q, l, u)
-    # x = local_search(x, Q, q, l, u, max_iter, false)
-    # result = @get_result x
-    # OptimizationResult{MQBProblem}(memoria=@get_memoria, result=result)
 end
