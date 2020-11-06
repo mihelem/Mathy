@@ -17,10 +17,10 @@ std::string find_last_token(std::string s, char c) {
 
 int main(int argc, char *argv[]) {
 
-  if (argc != 6 || argc != 7) {
-    std::cout << "usage:\t "
-              << argv[0]
-              << " problem_name n_stages n_iters_per_stage alpha beta [alpha_div]"
+  if (argc != 6 && argc != 7) {
+    std::cout << argv[0]
+              << " problem_name n_stages n_iters_per_stage alpha beta [alpha_div=2.0]\n"
+              << "\t\tto run RNM on the problem described in problem_name.{qfc, dmx}"
               << std::endl;
     return 0;
   } else {
@@ -31,7 +31,14 @@ int main(int argc, char *argv[]) {
     double alpha_div = argc==6 ? 2.0 : std::stod(argv[6]);
 
     std::string filename(argv[1]);
-    auto singular{std::stoi(find_last_token(filename, '-'))};
+    auto get_singular = [](std::string const &filename) -> int {
+        try {
+          return std::stoi(find_last_token(filename, '-'));
+        } catch (std::invalid_argument &ex) {
+          return 0;
+        }
+      };
+    auto singular{get_singular(filename)};
     ProblemVecs<double, int, std::vector> problem("./", filename, singular);
     std::cout << problem.m << ' ' << problem.n << std::endl;
 
