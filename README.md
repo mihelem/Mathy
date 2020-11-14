@@ -34,6 +34,6 @@ with
 * `Q` ∈ { diag ≥ 0 }
 * `E` : node-arc incidence matrix of directed graph, `rank ≡ nodes - connected components` if unreduced
 
-For a sketch of the theory behind the code, take a look at the [report](report/CM1920_noML09.pdf).
+For a sketch of the theory behind the code, take a look at the [report](report/CM19_20___noML09.pdf).
 
 
